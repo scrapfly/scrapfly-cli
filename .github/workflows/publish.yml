@@ -1,0 +1,51 @@
+name: publish
+
+# Publishes the npm wrapper package on each `v*` tag. The Go binaries are
+# already released by .github/workflows/release.yml; this workflow only
+# ships the thin shim under packages/npm.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to (re)publish (e.g. v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  id-token: write   # OIDC provenance on npm publish
+  contents: read
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve tag + strip leading v
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Pin package version to tag
+        working-directory: packages/npm
+        run: npm version --no-git-tag-version "${{ steps.tag.outputs.version }}"
+
+      - name: Publish to npm
+        working-directory: packages/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
+        run: npm publish --access public --provenance

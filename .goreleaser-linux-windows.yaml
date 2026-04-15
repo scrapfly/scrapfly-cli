@@ -1,0 +1,32 @@
+version: 2
+
+project_name: scrapfly
+
+builds:
+  - id: scrapfly
+    main: ./cmd/scrapfly
+    binary: scrapfly
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [binary]
+    name_template: >-
+      {{ .ProjectName }}-{{ .Os }}-{{ .Arch }}
+
+checksum:
+  name_template: checksums-linux-windows.txt
+
+changelog:
+  disable: true
