@@ -1,0 +1,52 @@
+version: 2
+
+project_name: scrapfly
+
+builds:
+  - id: scrapfly
+    main: ./cmd/scrapfly
+    binary: scrapfly
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+universal_binaries:
+  - id: scrapfly
+    ids:
+      - scrapfly
+    name_template: scrapfly
+    # Keep both the universal binary AND the per-arch darwin builds so users
+    # on Apple Silicon can grab the leaner arm64-only archive if they want.
+    replace: false
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    # Deterministic {os}-{arch} naming for installer.sh consumption:
+    #   scrapfly-darwin-amd64.tar.gz
+    #   scrapfly-darwin-arm64.tar.gz
+    #   scrapfly-darwin-universal.tar.gz
+    name_template: >-
+      {{ .ProjectName }}-{{ .Os }}-{{ if eq .Arch "all" }}universal{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
