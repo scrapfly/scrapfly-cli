@@ -1,0 +1,54 @@
+name: 'Setup Scrapfly CLI'
+description: 'Install the Scrapfly CLI on a GitHub Actions runner and put it on the PATH.'
+branding:
+  icon: 'globe'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'Version to install (e.g. v0.2.0). Leave blank for latest.'
+    required: false
+    default: ''
+  api-key:
+    description: 'SCRAPFLY_API_KEY to export for subsequent steps.'
+    required: false
+    default: ''
+  prefix:
+    description: 'Install directory (must be writable by the runner).'
+    required: false
+    default: '$HOME/.local/bin'
+
+runs:
+  using: composite
+  steps:
+    - name: Install scrapfly CLI
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_PREFIX: ${{ inputs.prefix }}
+      run: |
+        set -eu
+        prefix=$(eval echo "${INPUT_PREFIX}")
+        mkdir -p "$prefix"
+        # The hosted installer already handles os/arch detection and
+        # quarantine-bit stripping on macOS. Pin a version when provided.
+        args="--prefix $prefix"
+        if [ -n "$INPUT_VERSION" ]; then
+          args="$args --version $INPUT_VERSION"
+        fi
+        curl -fsSL https://scrapfly.io/scrapfly-cli/install | sh -s -- $args
+        echo "$prefix" >> "$GITHUB_PATH"
+
+    - name: Export SCRAPFLY_API_KEY
+      if: ${{ inputs.api-key != '' }}
+      shell: bash
+      env:
+        SCRAPFLY_API_KEY: ${{ inputs.api-key }}
+      run: |
+        # Mask the key so it can't accidentally show up in logs.
+        echo "::add-mask::$SCRAPFLY_API_KEY"
+        echo "SCRAPFLY_API_KEY=$SCRAPFLY_API_KEY" >> "$GITHUB_ENV"
+
+    - name: Verify installation
+      shell: bash
+      run: scrapfly version

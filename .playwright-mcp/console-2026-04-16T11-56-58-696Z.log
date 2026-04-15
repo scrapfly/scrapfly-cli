@@ -1,0 +1,4 @@
+[     746ms] [WARNING] Error with Permissions-Policy header: Unrecognized feature: 'ch-ua-form-factor'. @ :0
+[    1604ms] [WARNING] <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes"> @ https://web-scraping.dev/login:0
+[   12018ms] [WARNING] Error with Permissions-Policy header: Unrecognized feature: 'ch-ua-form-factor'. @ :0
+[   12596ms] [WARNING] <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes"> @ https://web-scraping.dev/login:0

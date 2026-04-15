@@ -1,0 +1,74 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "web-scraping.dev" [ref=e4] [cursor=pointer]:
+        - /url: https://web-scraping.dev/
+      - generic [ref=e5]:
+        - list [ref=e6]:
+          - listitem [ref=e7]:
+            - button "Docs" [ref=e8] [cursor=pointer]
+          - listitem [ref=e9]:
+            - link "Products" [ref=e10] [cursor=pointer]:
+              - /url: https://web-scraping.dev/products
+          - listitem [ref=e11]:
+            - link "Reviews" [ref=e12] [cursor=pointer]:
+              - /url: https://web-scraping.dev/reviews
+          - listitem [ref=e13]:
+            - link "Testimonials" [ref=e14] [cursor=pointer]:
+              - /url: https://web-scraping.dev/testimonials
+          - listitem [ref=e15]:
+            - link "File Download" [ref=e16] [cursor=pointer]:
+              - /url: https://web-scraping.dev/file-download
+        - list [ref=e17]:
+          - listitem [ref=e18]:
+            - link "logout" [ref=e19] [cursor=pointer]:
+              - /url: https://web-scraping.dev/api/logout
+          - listitem [ref=e20] [cursor=pointer]:
+            - generic [ref=e21]:
+              - img [ref=e22]
+              - superscript [ref=e24]: "0"
+  - generic [ref=e25]:
+    - generic [ref=e26]:
+      - heading "Login to web-scraping.dev" [level=1] [ref=e27]
+      - generic [ref=e28]:
+        - generic [ref=e29]: Logged in as User123
+        - generic [ref=e30]: "Your IP: 94.46.36.234 (login IP: 94.46.36.234 ✓)"
+        - generic [ref=e31]:
+          - text: "The secret message is:"
+          - generic [ref=e32]: 🤫
+        - link "Logout" [ref=e33] [cursor=pointer]:
+          - /url: /api/logout
+          - button "Logout" [ref=e34]
+    - generic [ref=e35]:
+      - link "Auth Credentials" [ref=e36] [cursor=pointer]:
+        - /url: https://web-scraping.dev/credentials
+      - link "Download ToS PDF" [ref=e37] [cursor=pointer]:
+        - /url: https://web-scraping.dev/assets/pdf/tos.pdf
+      - button "Download EULA PDF" [ref=e38] [cursor=pointer]
+    - group [ref=e40]:
+      - generic "Configure" [ref=e41] [cursor=pointer]
+  - contentinfo [ref=e43]:
+    - link "SCRAPFLY ACADEMY" [ref=e45] [cursor=pointer]:
+      - /url: https://scrapfly.io/academy
+      - button "SCRAPFLY ACADEMY" [ref=e46]:
+        - img [ref=e47]
+        - text: SCRAPFLY ACADEMY
+    - list [ref=e51]:
+      - listitem [ref=e52]:
+        - link "API Docs" [ref=e53] [cursor=pointer]:
+          - /url: /docs
+      - listitem [ref=e54]:
+        - link "Sitemap" [ref=e55] [cursor=pointer]:
+          - /url: /sitemap.xml
+      - listitem [ref=e56]:
+        - link "Blog" [ref=e57] [cursor=pointer]:
+          - /url: https://scrapfly.io/blog
+      - listitem [ref=e58]:
+        - link "GitHub" [ref=e59] [cursor=pointer]:
+          - /url: https://github.com/scrapfly
+      - listitem [ref=e60]: v1.3.0
+      - listitem [ref=e61]:
+        - text: made by
+        - link "ScrapFly" [ref=e62] [cursor=pointer]:
+          - /url: https://web-scraping.dev/
+        - img [ref=e63]
