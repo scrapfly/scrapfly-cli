@@ -1,0 +1,80 @@
+version: 2
+
+project_name: scrapfly
+
+builds:
+  - id: scrapfly
+    main: ./cmd/scrapfly
+    binary: scrapfly
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+universal_binaries:
+  - id: scrapfly
+    ids:
+      - scrapfly
+    name_template: scrapfly
+    # Keep both the universal binary AND the per-arch darwin builds so users
+    # on Apple Silicon can grab the leaner arm64-only archive if they want.
+    replace: false
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    # Deterministic {os}-{arch} naming for installer.sh consumption:
+    #   scrapfly-darwin-amd64.tar.gz
+    #   scrapfly-darwin-arm64.tar.gz
+    #   scrapfly-darwin-universal.tar.gz
+    name_template: >-
+      {{ .ProjectName }}-{{ .Os }}-{{ if eq .Arch "all" }}universal{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+# Publishes a Homebrew Cask to `scrapfly/homebrew-tap` so users can
+#   brew install scrapfly/tap/scrapfly
+# Requires a HOMEBREW_TAP_TOKEN secret with contents:write on the tap repo,
+# exposed to the goreleaser-darwin job. Only the darwin job emits the cask
+# (the universal binary covers both amd64 and arm64 macs).
+homebrew_casks:
+  - name: scrapfly
+    ids: [scrapfly]
+    repository:
+      owner: scrapfly
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: https://scrapfly.io
+    description: Agentic CLI for the Scrapfly platform. Scrape, extract, crawl, and drive a cloud browser over CDP.
+    binaries:
+      - scrapfly
+    completions:
+      bash: scrapfly completion bash
+      zsh: scrapfly completion zsh
+      fish: scrapfly completion fish
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/scrapfly"]
+          end

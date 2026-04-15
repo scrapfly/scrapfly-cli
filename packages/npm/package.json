@@ -1,0 +1,51 @@
+{
+  "name": "scrapfly-cli",
+  "version": "0.2.0",
+  "description": "Scrapfly CLI: agentic scraping, screenshots, AI extraction, crawling, and a cloud browser over CDP. This package downloads the right platform binary on install.",
+  "keywords": [
+    "scrapfly",
+    "scraping",
+    "scraper",
+    "web-scraping",
+    "headless-browser",
+    "anti-bot",
+    "stealth-browser",
+    "agentic",
+    "llm-agent",
+    "mcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scrapfly/scrapfly-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/scrapfly/scrapfly-cli/issues"
+  },
+  "homepage": "https://scrapfly.io",
+  "license": "MIT",
+  "bin": {
+    "scrapfly": "bin/scrapfly.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "postuninstall": "node -e \"try{require('fs').rmSync(require('path').join(__dirname,'vendor'),{recursive:true,force:true})}catch(e){}\""
+  },
+  "files": [
+    "bin",
+    "install.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

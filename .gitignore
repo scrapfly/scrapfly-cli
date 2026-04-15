@@ -1,0 +1,6 @@
+dist/
+/scrapfly
+*.test
+coverage.out
+.DS_Store
+node_modules/
