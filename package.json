@@ -1,0 +1,13 @@
+{
+  "name": "scrapfly-cli",
+  "private": true,
+  "description": "Dev-convenience wrapper. The real build is Go; see go.mod.",
+  "scripts": {
+    "build": "go build -o dist/scrapfly ./cmd/scrapfly",
+    "start": "pnpm build && ./dist/scrapfly",
+    "test": "go test ./...",
+    "lint": "go vet ./...",
+    "format": "gofmt -w .",
+    "format:check": "test -z \"$(gofmt -l .)\""
+  }
+}
