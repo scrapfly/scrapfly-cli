@@ -13,11 +13,13 @@
 #                        (falls back to $HOME/.local/bin if not writable).
 #   --dest   <path>      explicit file path for the binary (overrides --prefix).
 #   --repo   <org/repo>  override the source repo. Default: scrapfly/scrapfly-cli.
+#   --no-verify          skip sha256 checksum verification (not recommended).
 #
 # Artifacts expected in the release:
 #   scrapfly-darwin-universal.tar.gz  (also amd64 / arm64)
 #   scrapfly-linux-amd64.tar.gz       (also arm64)
 #   scrapfly-windows-amd64.zip        (manual install on Windows)
+#   checksums.txt                     (sha256 sums, one per asset)
 
 set -eu
 
@@ -25,15 +27,17 @@ REPO="${REPO:-scrapfly/scrapfly-cli}"
 VERSION="${SCRAPFLY_VERSION:-}"
 PREFIX="${PREFIX:-/usr/local/bin}"
 DEST=""
+VERIFY=1
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --version) VERSION="$2"; shift 2 ;;
-    --prefix)  PREFIX="$2"; shift 2 ;;
-    --dest)    DEST="$2"; shift 2 ;;
-    --repo)    REPO="$2"; shift 2 ;;
+    --version)    VERSION="$2"; shift 2 ;;
+    --prefix)     PREFIX="$2"; shift 2 ;;
+    --dest)       DEST="$2"; shift 2 ;;
+    --repo)       REPO="$2"; shift 2 ;;
+    --no-verify)  VERIFY=0; shift ;;
     -h|--help)
-      sed -n '3,22p' "$0"; exit 0 ;;
+      sed -n '3,23p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -56,27 +60,51 @@ case "$os" in
 esac
 
 if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
-  url="https://github.com/${REPO}/releases/latest/download/${asset}"
+  base="https://github.com/${REPO}/releases/latest/download"
   VERSION="latest"
 else
-  url="https://github.com/${REPO}/releases/download/${VERSION}/${asset}"
+  base="https://github.com/${REPO}/releases/download/${VERSION}"
 fi
+url="${base}/${asset}"
+checksums_url="${base}/checksums.txt"
 
 info "target: $os-$arch ($asset)"
 info "source: $url"
 
+fetch() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fSL "$1" -o "$2"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$2" "$1"
+  else
+    fatal "need curl or wget"
+  fi
+}
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-if command -v curl >/dev/null 2>&1; then
-  curl -fSL "$url" -o "$tmp/asset.tar.gz"
-elif command -v wget >/dev/null 2>&1; then
-  wget -qO "$tmp/asset.tar.gz" "$url"
-else
-  fatal "need curl or wget"
+fetch "$url" "$tmp/$asset"
+
+if [ "$VERIFY" -eq 1 ]; then
+  info "verifying sha256 against checksums.txt"
+  if ! fetch "$checksums_url" "$tmp/checksums.txt"; then
+    fatal "could not download checksums.txt from $checksums_url (use --no-verify to skip)"
+  fi
+  expected=$(awk -v f="$asset" '$2 == f {print $1; found=1; exit} END {if (!found) exit 1}' "$tmp/checksums.txt") \
+    || fatal "no checksum entry for $asset in checksums.txt"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "$tmp/$asset" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    actual=$(shasum -a 256 "$tmp/$asset" | awk '{print $1}')
+  else
+    fatal "need sha256sum or shasum for verification (use --no-verify to skip)"
+  fi
+  [ "$actual" = "$expected" ] || fatal "checksum mismatch: expected $expected, got $actual"
+  info "checksum ok"
 fi
 
-tar -xzf "$tmp/asset.tar.gz" -C "$tmp"
+tar -xzf "$tmp/$asset" -C "$tmp"
 binary="$tmp/scrapfly"
 [ -f "$binary" ] || fatal "archive did not contain ./scrapfly"
 
