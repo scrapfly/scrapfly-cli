@@ -10,7 +10,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "0.3.4"
+// Populated at build time via ldflags in .goreleaser*.yaml. Defaults keep
+// `go install ./cmd/scrapfly` / `go build` usable without goreleaser.
+var (
+	version = "0.3.5"
+	commit  = "dev"
+	date    = "unknown"
+)
 
 type rootFlags struct {
 	apiKey      string

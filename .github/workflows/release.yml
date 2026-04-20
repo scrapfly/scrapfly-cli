@@ -176,6 +176,15 @@ jobs:
       - name: List assembled assets
         run: ls -la dist/
 
+      - name: Build combined checksums.txt
+        # The self-updater (cmd/scrapfly/update.go) expects a single
+        # `checksums.txt` in the release. Merge the three per-OS files.
+        run: |
+          cd dist
+          cat checksums-darwin.txt checksums-linux.txt checksums-windows.txt > checksums.txt
+          echo "=== combined checksums.txt ==="
+          cat checksums.txt
+
       - name: Create GitHub release with all assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
