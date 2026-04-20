@@ -39,12 +39,42 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+  # ── CI gate: same checks as .github/workflows/ci.yml but pinned to the
+  #    release tag. Every build job `needs: ci` so no archive ships if
+  #    any check fails.
+  ci:
+    runs-on: ubuntu-latest
+    needs: resolve-tag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git checkout ${{ needs.resolve-tag.outputs.tag }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "::error::gofmt issues:"
+            echo "$out"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+      - name: go build
+        run: go build -o /tmp/scrapfly ./cmd/scrapfly
+
   # ── Three parallel build jobs — one per OS. Each runs goreleaser with
   #    --skip=publish so nothing hits GitHub Releases yet; archives land
   #    as actions artifacts that the `publish` job assembles.
   build-darwin:
     runs-on: macos-latest
-    needs: resolve-tag
+    needs: [resolve-tag, ci]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,7 +102,7 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
-    needs: resolve-tag
+    needs: [resolve-tag, ci]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,7 +130,7 @@ jobs:
 
   build-windows:
     runs-on: ubuntu-latest
-    needs: resolve-tag
+    needs: [resolve-tag, ci]
     steps:
       - uses: actions/checkout@v4
         with:
