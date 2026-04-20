@@ -51,7 +51,13 @@ _dev-local-build:
 
 bump:
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make bump VERSION=x.y.z"; exit 2; fi
-	sed -i "s/^var version = \".*\"/var version = \"$(VERSION)\"/" cmd/scrapfly/root.go
+	@# Match both top-level `var version = "..."` and indented `version = "..."`
+	@# inside a `var ( ... )` block. The previous `^var version` anchor silently
+	@# stopped matching after the var block was introduced in 583b4cf.
+	sed -i -E 's/^([[:space:]]*(var )?version[[:space:]]*=[[:space:]]*")[^"]*(")/\1$(VERSION)\3/' cmd/scrapfly/root.go
+	@# Fail loudly if the edit didn't actually change the file — catches future
+	@# refactors of root.go that break the pattern again.
+	git diff --quiet cmd/scrapfly/root.go && { echo "bump: sed did not update version; check root.go layout"; exit 1; } || true
 	git add cmd/scrapfly/root.go
 	git commit -m "bump version to $(VERSION)"
 	git push
@@ -76,7 +82,10 @@ release:
 	-git commit -m "Update API reference for version $(VERSION)"
 	-git push origin main
 	git tag -a v$(VERSION) -m "Version $(VERSION)"
-	git push --tags
+	@# Push ONLY the new tag, not `--tags`. The previous form pushed every stale
+	@# local tag (e.g. dangling v0.3.1) and triggered old, broken workflows; it
+	@# also failed non-FF on the moving `latest` tag, aborting the bump step.
+	git push origin v$(VERSION)
 	@if [ -n "$(NEXT_VERSION)" ]; then $(MAKE) bump VERSION=$(NEXT_VERSION); fi
 
 fmt:
