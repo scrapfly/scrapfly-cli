@@ -8,7 +8,7 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/openai/openai-go v1.12.0
-	github.com/scrapfly/go-scrapfly v0.3.0
+	github.com/scrapfly/go-scrapfly v0.3.3
 	github.com/spf13/cobra v1.10.2
 	google.golang.org/genai v1.54.0
 )
@@ -32,6 +32,8 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/crypto v0.43.0 // indirect
