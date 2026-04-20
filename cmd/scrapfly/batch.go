@@ -24,13 +24,13 @@ import (
 // (classic batch semantics, not a full slice collected at the end).
 func newBatchCmd(flags *rootFlags) *cobra.Command {
 	var (
-		urls       []string
-		urlFile    string
-		country    string
-		proxyPool  string
-		renderJS   bool
-		asp        bool
-		msgpack    bool
+		urls      []string
+		urlFile   string
+		country   string
+		proxyPool string
+		renderJS  bool
+		asp       bool
+		msgpack   bool
 	)
 
 	cmd := &cobra.Command{

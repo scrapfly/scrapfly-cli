@@ -18,10 +18,10 @@ import (
 // newClassifyCmd exposes POST /classify. Three input modes, same piping
 // ergonomics as `scrapfly extract`:
 //
-//   --fetch           CLI fetches URL itself, forwards status/headers/body.
-//   --file FILE       load body from a file; status and headers come from flags.
-//   stdin             raw body piped in; status and headers come from flags.
-//   --body STRING     inline body for short snippets; flags supply the rest.
+//	--fetch           CLI fetches URL itself, forwards status/headers/body.
+//	--file FILE       load body from a file; status and headers come from flags.
+//	stdin             raw body piped in; status and headers come from flags.
+//	--body STRING     inline body for short snippets; flags supply the rest.
 func newClassifyCmd(flags *rootFlags) *cobra.Command {
 	var (
 		url        string

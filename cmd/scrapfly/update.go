@@ -30,16 +30,16 @@ import (
 // and its checksum always come from the GitHub release.
 
 const (
-	githubRepo         = "scrapfly/scrapfly-cli"
-	githubAPI          = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
+	githubRepo          = "scrapfly/scrapfly-cli"
+	githubAPI           = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
 	updateCheckCacheTTL = 24 * time.Hour
 )
 
 type githubRelease struct {
-	TagName string         `json:"tag_name"`
-	Name    string         `json:"name"`
-	HTMLURL string         `json:"html_url"`
-	Assets  []githubAsset  `json:"assets"`
+	TagName string        `json:"tag_name"`
+	Name    string        `json:"name"`
+	HTMLURL string        `json:"html_url"`
+	Assets  []githubAsset `json:"assets"`
 }
 
 type githubAsset struct {
@@ -90,10 +90,10 @@ and reversible (the previous binary is kept as .bak for one cycle).`,
 					return nil
 				}
 				return out.WriteSuccess(os.Stdout, false, "update", map[string]any{
-					"current":   current,
-					"latest":    latest,
-					"newer":     false,
-					"html_url":  rel.HTMLURL,
+					"current":  current,
+					"latest":   latest,
+					"newer":    false,
+					"html_url": rel.HTMLURL,
 				})
 			}
 
@@ -130,10 +130,10 @@ and reversible (the previous binary is kept as .bak for one cycle).`,
 				return nil
 			}
 			return out.WriteSuccess(os.Stdout, false, "update", map[string]any{
-				"current":  current,
-				"latest":   latest,
-				"newer":    true,
-				"html_url": rel.HTMLURL,
+				"current":   current,
+				"latest":    latest,
+				"newer":     true,
+				"html_url":  rel.HTMLURL,
 				"installed": true,
 			})
 		},
