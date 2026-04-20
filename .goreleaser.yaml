@@ -41,7 +41,13 @@ archives:
       - README.md
 
 checksum:
-  name_template: checksums.txt
+  name_template: checksums-darwin.txt
+
+release:
+  # Uploads into the draft the `create-release` job stood up; the `finalize`
+  # job publishes the draft after all three OS jobs land their assets.
+  use_existing_draft: true
+  draft: true
 
 changelog:
   sort: asc

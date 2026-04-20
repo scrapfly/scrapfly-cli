@@ -15,87 +15,149 @@ permissions:
   contents: write
 
 jobs:
-  goreleaser-darwin:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Stash GoReleaser config
-        run: cp .goreleaser.yaml /tmp/.goreleaser.yaml
-
-      - name: Checkout release tag
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: git checkout ${{ inputs.tag }}
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --clean --config /tmp/.goreleaser.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  goreleaser-linux-windows:
+  # ── 1. Stand up an empty draft release that all three goreleaser jobs
+  #    will upload archives into. Running this first means the three OS
+  #    jobs can run fully in parallel without racing to create the release.
+  create-release:
     runs-on: ubuntu-latest
-    needs: goreleaser-darwin
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Stash GoReleaser config
-        run: cp .goreleaser-linux-windows.yaml /tmp/.goreleaser-linux-windows.yaml
-
-      - name: Checkout release tag
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: git checkout ${{ inputs.tag }}
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          # darwin job already created the GitHub Release; append linux/windows
-          # archives to it. No --skip=publish: goreleaser uploads directly,
-          # matching the naming the self-updater (cmd/scrapfly/update.go) expects.
-          args: release --clean --config /tmp/.goreleaser-linux-windows.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  update-latest-tag:
-    # Move the `latest` git tag to point at the version tag we just released.
-    # Lets consumers `git checkout latest` or pin a moving ref without caring
-    # about version numbers. GitHub Releases already exposes /releases/latest
-    # automatically so the installer doesn't need this, but it's a common
-    # muscle-memory tag (Docker images, Homebrew casks, etc.).
-    needs: [goreleaser-darwin, goreleaser-linux-windows]
-    runs-on: ubuntu-latest
-    # Skip on manual re-releases of older tags (only move `latest` for the
-    # newest push-triggered tag).
-    if: github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Force-move `latest` tag
+      - name: Ensure draft release exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — reusing as draft target."
+          else
+            gh release create "$TAG" --draft --title "$TAG" --notes "Release $TAG"
+          fi
+
+  # ── 2a/2b/2c. Three isolated parallel goreleaser jobs — one per OS.
+  #    Each uses its own config, its own checksum file, and uploads into
+  #    the draft created above (use_existing_draft: true in each YAML).
+  release-darwin:
+    runs-on: macos-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Checkout release tag
+        run: git checkout ${{ needs.create-release.outputs.tag }}
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --config .goreleaser.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-linux:
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Checkout release tag
+        run: git checkout ${{ needs.create-release.outputs.tag }}
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --config .goreleaser-linux.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-windows:
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Checkout release tag
+        run: git checkout ${{ needs.create-release.outputs.tag }}
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --config .goreleaser-windows.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── 3. Publish the draft and move the `latest` git tag. Runs after all
+  #    three OS jobs have landed their assets.
+  finalize:
+    runs-on: ubuntu-latest
+    needs: [release-darwin, release-linux, release-windows]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest
+
+      - name: Force-move `latest` git tag
+        # Only for tag pushes — skip on re-releases of older tags via
+        # workflow_dispatch so we don't demote a newer `latest`.
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          TAG="${GITHUB_REF_NAME}"
-          echo "Moving 'latest' to $TAG ($(git rev-parse --short "$TAG"))"
           git tag -f latest "$TAG"
           git push origin latest --force

@@ -1,0 +1,42 @@
+version: 2
+
+project_name: scrapfly
+
+builds:
+  - id: scrapfly
+    main: ./cmd/scrapfly
+    binary: scrapfly
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    # Deterministic {os}-{arch} naming for installer.sh + self-updater consumption:
+    #   scrapfly-linux-amd64.tar.gz
+    #   scrapfly-linux-arm64.tar.gz
+    name_template: >-
+      {{ .ProjectName }}-{{ .Os }}-{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums-linux.txt
+
+release:
+  # Let the `create-release` job stand up the draft; uploads here append.
+  use_existing_draft: true
+  draft: true
+
+changelog:
+  disable: true
