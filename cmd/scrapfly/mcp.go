@@ -20,15 +20,13 @@ func newMcpCmd(flags *rootFlags) *cobra.Command {
 		Short: "Expose Scrapfly as tools over the Model Context Protocol",
 	}
 	cmd.AddCommand(newMcpServeCmd(flags))
-	cmd.AddCommand(newMcpPlaywrightCmd(flags))
-	cmd.AddCommand(newMcpDevtoolsCmd(flags))
 	return cmd
 }
 
 func newMcpServeCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "serve",
-		Short: "Run an MCP stdio server exposing Scrapfly tools (scrape, screenshot, extract, crawl, selector, browser)",
+		Short: "Run an MCP stdio server exposing Scrapfly tools (scrape, screenshot, extract, crawl, selector)",
 		Long: `Exposes the Scrapfly product surface as MCP tools. Add this binary to
 your MCP client (Claude Desktop, Cursor, Claude Code, etc.) as:
 
@@ -50,8 +48,6 @@ here). One MCP tool per Scrapfly verb; inputs mirror the CLI flags.`,
 			registerExtractTool(server, flags)
 			registerCrawlRunTool(server, flags)
 			registerSelectorTool(server, flags)
-			browserState := registerBrowserTools(server, flags)
-			defer browserState.close()
 
 			ctx, cancel := context.WithCancel(cmd.Context())
 			defer cancel()

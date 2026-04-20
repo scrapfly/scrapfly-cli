@@ -102,11 +102,6 @@ Flag groups:
         --prompt "product name, price, sku, description"`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			applyProductDefaults(cmd, map[string]*string{
-				"country": &country, "format": &format, "proxy-pool": &proxyPool,
-			}, map[string]*bool{
-				"asp": &asp, "render-js": &renderJS, "cache": &cache, "debug": &debug,
-			})
 			if onlyMainContent && format == "" {
 				format = string(scrapfly.FormatMarkdown)
 			}
@@ -387,6 +382,12 @@ Flag groups:
 	cmd.Flags().BoolVar(&dns, "dns", false, "capture DNS details")
 	cmd.Flags().StringVar(&correlationID, "correlation-id", "", "correlation id for tracking")
 	cmd.Flags().BoolVar(&proxified, "proxified", false, "stream raw upstream body to stdout (or -o) with no JSON envelope — use for pipes")
+
+	// Web Scraping API sub-actions that live under `scrape` / `scraper`:
+	//   scrapfly scrape batch ...
+	//   scrapfly scrape classify ...
+	cmd.AddCommand(newBatchCmd(flags))
+	cmd.AddCommand(newClassifyCmd(flags))
 
 	return cmd
 }

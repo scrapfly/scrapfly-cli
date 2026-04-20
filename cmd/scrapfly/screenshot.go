@@ -49,11 +49,6 @@ Without either, the image is returned base64-encoded inside the JSON envelope.`,
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			applyProductDefaults(cmd, map[string]*string{
-				"country": &country,
-			}, map[string]*bool{
-				"cache": &cache,
-			})
 			cfg := &scrapfly.ScreenshotConfig{
 				URL:                  args[0],
 				Format:               scrapfly.ScreenshotFormat(format),

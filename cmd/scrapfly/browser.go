@@ -120,11 +120,6 @@ The WSS URL includes your API key as a query param — treat as a secret.`,
 	cmd.AddCommand(newBrowserScrollCmd(flags))
 	cmd.AddCommand(newBrowserScreenshotSessionCmd(flags))
 	cmd.AddCommand(newBrowserEvalCmd(flags))
-	cmd.AddCommand(newBrowserResponseCmd(flags))
-	cmd.AddCommand(newBrowserRequestCmd(flags))
-	cmd.AddCommand(newBrowserDownloadCmd(flags))
-	cmd.AddCommand(newBrowserReplayCmd(flags))
-	cmd.AddCommand(newBrowserMcpCmd(flags))
 	return cmd
 }
 
@@ -146,7 +141,6 @@ type browserLaunchFlags struct {
 	extensions   []string
 	browserBrand string
 	byopProxy    string
-	enableMCP    bool
 }
 
 func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
@@ -158,7 +152,6 @@ func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
 	// stop / status / action subcommands. Callers outside the browser tree
 	// (e.g. agent) bind their own --session flag and copy it into f.session.
 	cmd.Flags().IntVar(&f.timeout, "session-timeout", 0, "session timeout seconds — max 1800 (Unblock) / default 900; controls how long Scrapfly keeps the browser alive. Keep high when using `browser start` across many calls.")
-	cmd.Flags().BoolVar(&f.enableMCP, "enable-mcp", false, "enable built-in MCP endpoint on the browser (Chromium exposes a streamable-HTTP MCP server)")
 	cmd.Flags().BoolVar(&f.blockImages, "block-images", false, "block image resources")
 	cmd.Flags().BoolVar(&f.blockStyles, "block-styles", false, "block CSS")
 	cmd.Flags().BoolVar(&f.blockFonts, "block-fonts", false, "block font resources")
@@ -192,7 +185,6 @@ func (f *browserLaunchFlags) toConfig() *scrapfly.CloudBrowserConfig {
 		Extensions:   f.extensions,
 		BrowserBrand: f.browserBrand,
 		BYOPProxy:    f.byopProxy,
-		EnableMCP:    f.enableMCP,
 	}
 }
 

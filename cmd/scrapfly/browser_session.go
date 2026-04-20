@@ -20,11 +20,10 @@ var sessionIDFlag string
 
 func newBrowserStartCmd(flags *rootFlags) *cobra.Command {
 	var (
-		targetURL  string
-		wsURL      string
-		unblock    bool
-		recordFile string
-		launchCfg  browserLaunchFlags
+		targetURL string
+		wsURL     string
+		unblock   bool
+		launchCfg browserLaunchFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "start",
@@ -39,9 +38,6 @@ Runs in the foreground; background it with & / systemd / tmux as you prefer.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if sessionIDFlag == "" {
 				return fmt.Errorf("--session <id> is required")
-			}
-			if recordFile != "" {
-				sessiond.RecordFile = recordFile
 			}
 			// Record as the active session so subsequent CLI calls can
 			// omit --session. Cleared by stop (or on process exit below).
@@ -90,7 +86,6 @@ Runs in the foreground; background it with & / systemd / tmux as you prefer.`,
 	cmd.Flags().StringVar(&targetURL, "url", "", "pre-navigate via /unblock (requires --unblock)")
 	cmd.Flags().StringVar(&wsURL, "ws", "", "attach to a pre-minted WS URL instead of building one")
 	cmd.Flags().BoolVar(&unblock, "unblock", false, "use /unblock for --url (anti-bot bypass)")
-	cmd.Flags().StringVar(&recordFile, "record", "", "record all actions to a .jsonl file for later replay")
 	bindBrowserLaunchFlags(cmd, &launchCfg)
 	return cmd
 }
@@ -311,119 +306,47 @@ func newBrowserContentCmd(flags *rootFlags) *cobra.Command {
 	var (
 		skipIframes bool
 		raw         bool
-		asJSON      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "content",
-		Short: "Return the page content with HTTP metadata, formatted for LLMs by default",
-		Long: `Combines Page.getRenderedContent (fully rendered HTML with iframes inlined)
-and Page.getNavigationResponse (redirect chain + final status/headers) into
-a single output.
-
-Default output is a structured text block designed for LLM consumption:
-
-  URL: https://example.com
-  Status: 200
-  Headers:
-    content-type: text/html; charset=utf-8
-    ...
-
-  Page content
-  ============
-  <html>...</html>
-
-Flags:
-  --json    JSON envelope with {url, status, headers, content, type}
-  --raw     raw HTML body only (no metadata, for pipes)`,
-		Example: `  scrapfly browser content              # LLM-friendly text
-  scrapfly browser content --json       # JSON envelope
-  scrapfly browser content --raw > p.html`,
+		Short: "Return the fully rendered page HTML with iframes inlined (Page.getRenderedContent)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			renderIframes := !skipIframes
+			req := sessiond.Request{Action: "content", RenderIframes: &renderIframes}
 			sid, ok := sessiond.Resolve(sessionIDFlag)
 			if !ok {
 				return fmt.Errorf("no active session")
 			}
-
-			// Fetch rendered content.
-			renderIframes := !skipIframes
-			contentResp, err := sessiond.Send(sid, sessiond.Request{Action: "content", RenderIframes: &renderIframes})
+			resp, err := sessiond.Send(sid, req)
 			if err != nil {
 				return err
 			}
-			var content struct {
+			var payload struct {
 				Content string `json:"content"`
 				Type    string `json:"type"`
 			}
-			_ = json.Unmarshal(contentResp.Data, &content)
-
-			// --raw: body only, no metadata.
-			if raw {
+			if err := json.Unmarshal(resp.Data, &payload); err != nil {
+				return err
+			}
+			if raw || flags.outputPath != "" {
 				if flags.outputPath != "" {
-					if err := os.WriteFile(flags.outputPath, []byte(content.Content), 0o644); err != nil {
+					if err := os.WriteFile(flags.outputPath, []byte(payload.Content), 0o644); err != nil {
 						return err
 					}
-					return out.WriteSuccess(os.Stdout, false, "browser.content", map[string]any{
-						"path": flags.outputPath, "bytes": len(content.Content),
+					return out.WriteSuccess(os.Stdout, flags.pretty, "browser.content", map[string]any{
+						"path": flags.outputPath, "bytes": len(payload.Content), "type": payload.Type,
 					})
 				}
-				fmt.Fprint(os.Stdout, content.Content)
+				fmt.Fprint(os.Stdout, payload.Content)
 				return nil
 			}
-
-			// Fetch navigation response (best-effort; non-Scrapfly browsers
-			// won't have this, so silently fall back to no metadata).
-			var finalURL string
-			var statusCode float64
-			var headers map[string]any
-			navResp, navErr := sessiond.Send(sid, sessiond.Request{Action: "response"})
-			if navErr == nil {
-				var nav struct {
-					Entries []map[string]any `json:"entries"`
-				}
-				_ = json.Unmarshal(navResp.Data, &nav)
-				if len(nav.Entries) > 0 {
-					last := nav.Entries[len(nav.Entries)-1]
-					finalURL, _ = last["url"].(string)
-					statusCode, _ = last["statusCode"].(float64)
-					headers, _ = last["headers"].(map[string]any)
-				}
-			}
-
-			// --json: structured envelope.
-			if asJSON {
-				return out.WriteSuccess(os.Stdout, false, "browser.content", map[string]any{
-					"url":         finalURL,
-					"status_code": int(statusCode),
-					"headers":     headers,
-					"content":     content.Content,
-					"type":        content.Type,
-					"bytes":       len(content.Content),
-				})
-			}
-
-			// Default: LLM-friendly text with metadata only (no body — body
-			// is typically huge HTML and would overflow an LLM context window).
-			// Use --raw for the body or --json for the full envelope.
-			if finalURL != "" {
-				fmt.Fprintf(os.Stdout, "URL: %s\n", finalURL)
-			}
-			if statusCode > 0 {
-				fmt.Fprintf(os.Stdout, "Status: %d\n", int(statusCode))
-			}
-			if len(headers) > 0 {
-				fmt.Fprintln(os.Stdout, "Headers:")
-				for k, v := range headers {
-					fmt.Fprintf(os.Stdout, "  %s: %v\n", k, v)
-				}
-			}
-			fmt.Fprintf(os.Stdout, "Content: %d bytes (%s) - use --raw for body, --json for envelope\n",
-				len(content.Content), content.Type)
-			return nil
+			return out.WriteSuccess(os.Stdout, flags.pretty, "browser.content", map[string]any{
+				"content": payload.Content, "type": payload.Type, "bytes": len(payload.Content),
+			})
 		},
 	}
 	cmd.Flags().BoolVar(&skipIframes, "skip-iframes", false, "don't inline iframe content (faster)")
-	cmd.Flags().BoolVar(&raw, "raw", false, "raw HTML body only (no metadata, for pipes)")
-	cmd.Flags().BoolVar(&asJSON, "json", false, "JSON envelope with url + status + headers + content")
+	cmd.Flags().BoolVar(&raw, "raw", false, "write raw HTML to stdout (no JSON envelope)")
 	return cmd
 }
 

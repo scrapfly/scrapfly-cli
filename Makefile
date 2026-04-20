@@ -11,7 +11,13 @@ NEXT_VERSION ?=
 BIN := scrapfly
 PKG := ./cmd/scrapfly
 
-.PHONY: init install dev bump generate-docs release fmt lint test vet
+# Path to the monorepo go-scrapfly SDK, used by `make dev-local` to
+# build a CLI binary that consumes the working-tree SDK instead of
+# the pinned published release. Override if the CLI lives outside
+# the monorepo.
+SDK_LOCAL ?= $(abspath $(CURDIR)/../../sdk/go)
+
+.PHONY: init install dev dev-local bump generate-docs release fmt lint test vet
 
 init:
 	go version >/dev/null
@@ -24,6 +30,25 @@ dev:
 	mkdir -p dist
 	go build -trimpath -o dist/$(BIN) $(PKG)
 
+# dev-local builds dist/$(BIN) against the monorepo working-tree
+# go-scrapfly SDK, then restores go.mod to its release state so
+# the repo stays clean for downstream `make release` / CI runs.
+# Pattern mirrors apps/scrapfly/mcp-cloud/.air.toml's build cmd.
+dev-local:
+	@mkdir -p dist
+	@echo "[dev-local] replacing go-scrapfly -> $(SDK_LOCAL)"
+	go mod edit -replace=github.com/scrapfly/go-scrapfly=$(SDK_LOCAL)
+	go mod tidy
+	$(MAKE) _dev-local-build; status=$$?; \
+	echo "[dev-local] dropping replace directive"; \
+	go mod edit -dropreplace=github.com/scrapfly/go-scrapfly; \
+	go mod tidy; \
+	exit $$status
+
+_dev-local-build:
+	go build -trimpath -o dist/$(BIN) $(PKG)
+	@echo "[dev-local] built dist/$(BIN)"
+
 bump:
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make bump VERSION=x.y.z"; exit 2; fi
 	sed -i "s/^var version = \".*\"/var version = \"$(VERSION)\"/" cmd/scrapfly/root.go
@@ -33,7 +58,13 @@ bump:
 
 generate-docs:
 	@mkdir -p docs/reference
-	go doc -all ./... > docs/reference/go-reference.txt
+	@# go doc doesn't accept `./...`; iterate through `go list` instead.
+	@: > docs/reference/go-reference.txt
+	@for pkg in $$(go list ./...); do \
+		echo "=== $$pkg ===" >> docs/reference/go-reference.txt; \
+		go doc -all "$$pkg" >> docs/reference/go-reference.txt 2>/dev/null || true; \
+		echo >> docs/reference/go-reference.txt; \
+	done
 
 release:
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=x.y.z [NEXT_VERSION=x.y.(z+1)]"; exit 2; fi
@@ -57,4 +88,14 @@ vet:
 	go vet ./...
 
 test:
-	go test ./...
+	@# Run tests against the local go-scrapfly SDK (same pattern as dev-local
+	# so unit tests can reference the new Classify/ScrapeBatchWithOptions
+	# surface without waiting for an SDK release). go.mod is restored after.
+	@echo "[test] replacing go-scrapfly -> $(SDK_LOCAL)"
+	go mod edit -replace=github.com/scrapfly/go-scrapfly=$(SDK_LOCAL)
+	go mod tidy
+	go test ./...; status=$$?; \
+	echo "[test] dropping replace directive"; \
+	go mod edit -dropreplace=github.com/scrapfly/go-scrapfly; \
+	go mod tidy; \
+	exit $$status

@@ -52,11 +52,11 @@ Pinned version or custom prefix:
 curl -fsSL https://scrapfly.io/scrapfly-cli/install | sh -s -- --version v0.1.0 --prefix ~/.local/bin
 ```
 
-Or grab a binary directly from
-[Releases](https://github.com/scrapfly/scrapfly-cli/releases). Artifacts
-are the raw executable named `scrapfly-{os}-{arch}` (`.exe` on Windows).
-Supported: `macos-amd64`, `macos-arm64`, `linux-amd64`, `linux-arm64`,
-`windows-amd64`, `windows-arm64`.
+Or grab a release tarball directly from
+[Releases](https://github.com/scrapfly/scrapfly-cli/releases) - artifacts
+follow `scrapfly-{os}-{arch}.tar.gz` (`scrapfly-windows-amd64.zip` on
+Windows). Supported: `darwin-universal`, `darwin-amd64`, `darwin-arm64`,
+`linux-amd64`, `linux-arm64`, `windows-amd64`.
 
 From source (Go 1.24+):
 
@@ -75,29 +75,32 @@ npm install -D scrapfly-cli
 npx scrapfly version
 ```
 
-### First-run warnings (unsigned binaries)
+### macOS Gatekeeper
 
-The released binaries aren't code-signed yet. First run shows a one-time
-warning on macOS and Windows; click-through and you won't see it again.
-
-**macOS** - *"Apple could not verify 'scrapfly' is free of malware"*:
+The released macOS binary is not yet signed with an Apple Developer ID, so
+first-run may hit *"Apple could not verify 'scrapfly' is free of malware"*.
 
 - `install.sh` strips the quarantine bit automatically.
-- If you downloaded the binary manually, run once:
+- If you downloaded the tarball manually, run once:
   ```bash
   xattr -d com.apple.quarantine /path/to/scrapfly
   ```
   (or right-click → Open in Finder the first time).
 
-**Windows** - *"Windows protected your PC"* (SmartScreen):
+Signing + notarization is on the roadmap.
 
-1. Click **More info** on the blue dialog.
-2. Click **Run anyway**.
+### Self-update
 
-Windows remembers the decision after the first run.
+Once installed, keep the binary current without re-running the installer:
 
-Proper Apple notarization + Windows Authenticode signing is on the
-roadmap.
+```bash
+scrapfly update           # upgrade in place to the latest GitHub release
+scrapfly update --check   # just print whether a newer version exists
+scrapfly update --version v0.3.0   # pin to a specific release
+```
+
+The binary always comes from the GitHub release + `checksums.txt`; the
+release-notes feed is only used for the human-readable changelog.
 
 ## Authentication
 
@@ -165,8 +168,10 @@ OpenAI-compatible endpoint (Ollama, vLLM, …).
 | Scrapfly API            | REST                                             | CLI                                    |
 |-------------------------|--------------------------------------------------|----------------------------------------|
 | Web Scraping            | `GET/POST /scrape`                               | `scrapfly scrape <url>`                |
+| Scrape Batch            | `POST /scrape/batch`                             | `scrapfly batch <urls…>`               |
 | Screenshot              | `POST /screenshot`                               | `scrapfly screenshot <url>`            |
 | Extraction              | `POST /extraction`                               | `scrapfly extract`                     |
+| Classify                | `POST /classify`                                 | `scrapfly classify`                    |
 | Crawler                 | `POST /crawl` + `/crawl/{uuid}/...`              | `scrapfly crawl {start,run,status,...}`|
 | Browser (CDP)           | `wss://browser.scrapfly.io`                      | `scrapfly browser [start/...]`         |
 | Browser Unblock         | `POST /unblock`                                  | `scrapfly browser <url> --unblock`     |
@@ -213,28 +218,9 @@ client:
 }
 ```
 
-Exposes `scrape`, `screenshot`, `extract`, `crawl_run`, `selector`, and
-8 browser tools (`browser_navigate`, `browser_snapshot`, `browser_click`,
-`browser_fill`, `browser_content`, `browser_eval`, `browser_screenshot`,
-`browser_close`) as MCP tools. Browser session is auto-started on first
-browser tool call.
-
-For the full Playwright tool surface (navigate, click, fill, screenshot,
-pdf, ...) backed by Scrapfly:
-
-```jsonc
-{
-  "mcpServers": {
-    "scrapfly-playwright": {
-      "command": "scrapfly",
-      "args": ["mcp", "playwright", "--country", "us"],
-      "env": { "SCRAPFLY_API_KEY": "scp-live-..." }
-    }
-  }
-}
-```
-
-Requires Node.js (`npx @playwright/mcp` runs under the hood).
+Exposes `scrape`, `screenshot`, `extract`, `crawl_run`, and `selector` as
+tools. Schemas are generated from the flag definitions so the client sees
+exactly the surface the CLI does.
 
 ## Shell completion
 

@@ -10,6 +10,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const https = require('node:https');
+const zlib = require('node:zlib');
 const { pipeline } = require('node:stream/promises');
 const { spawnSync } = require('node:child_process');
 
@@ -27,12 +28,12 @@ const mappedArch = arch === 'x64' ? 'amd64' : arch === 'arm64' ? 'arm64' : null;
 
 let asset;
 let binName = 'scrapfly';
-if (platform === 'darwin' && mappedArch) {
-  asset = `scrapfly-macos-${mappedArch}`;
+if (platform === 'darwin') {
+  asset = 'scrapfly-darwin-universal.tar.gz';
 } else if (platform === 'linux' && mappedArch) {
-  asset = `scrapfly-linux-${mappedArch}`;
-} else if (platform === 'win32' && mappedArch) {
-  asset = `scrapfly-windows-${mappedArch}.exe`;
+  asset = `scrapfly-linux-${mappedArch}.tar.gz`;
+} else if (platform === 'win32') {
+  asset = 'scrapfly-windows-amd64.zip';
   binName = 'scrapfly.exe';
 } else {
   console.error(`[scrapfly-cli] unsupported platform: ${platform}/${arch}`);
@@ -60,10 +61,35 @@ async function download(u) {
   });
 }
 
+async function extractTarGz(stream, outDir) {
+  // Use the `tar` module if present, otherwise shell out to `tar` (available
+  // on every macOS/Linux install). Keeping zero runtime deps.
+  const tmp = path.join(outDir, 'scrapfly.tar.gz');
+  await pipeline(stream, fs.createWriteStream(tmp));
+  const ok = spawnSync('tar', ['-xzf', tmp, '-C', outDir], { stdio: 'inherit' });
+  fs.unlinkSync(tmp);
+  if (ok.status !== 0) throw new Error('tar extraction failed');
+}
+
+async function extractZip(stream, outDir) {
+  const tmp = path.join(outDir, 'scrapfly.zip');
+  await pipeline(stream, fs.createWriteStream(tmp));
+  const ok = spawnSync('unzip', ['-o', tmp, '-d', outDir], { stdio: 'inherit' });
+  fs.unlinkSync(tmp);
+  if (ok.status !== 0) throw new Error('unzip extraction failed');
+}
+
 (async () => {
   console.log(`[scrapfly-cli] downloading ${asset} from ${url}`);
   const res = await download(url);
-  await pipeline(res, fs.createWriteStream(binTarget));
+  if (asset.endsWith('.zip')) {
+    await extractZip(res, vendor);
+  } else {
+    await extractTarGz(res, vendor);
+  }
+  if (!fs.existsSync(binTarget)) {
+    throw new Error(`archive did not contain ${binName}`);
+  }
   if (platform !== 'win32') {
     fs.chmodSync(binTarget, 0o755);
     // Strip macOS Gatekeeper quarantine attribute so the first run doesn't

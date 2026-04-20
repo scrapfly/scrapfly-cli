@@ -55,7 +55,7 @@ func Attach(ctx context.Context, c *Client) (*Session, error) {
 	}
 
 	// Enable the domains we use.
-	for _, domain := range []string{"Page", "DOM", "Runtime", "Accessibility", "Network"} {
+	for _, domain := range []string{"Page", "DOM", "Runtime", "Accessibility"} {
 		if _, err := s.Call(ctx, domain+".enable", nil); err != nil {
 			return nil, fmt.Errorf("enable %s: %w", domain, err)
 		}

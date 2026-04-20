@@ -57,9 +57,6 @@ products.
   body via `--file` or stdin; `--content-type`, `--url`, `--charset`,
   `--prompt | --model | --template | --template-file` (one of four
   extraction modes), `--compression`, `--webhook`, `--request-timeout`.
-- `scrapfly download <url>` - download binary files (PDFs, images, ZIPs)
-  via the Scraping API. Decodes base64 when `format=binary`. Supports
-  `-o <file>`, `-O <dir>`, or auto-names from the URL path.
 - `scrapfly crawl run <url> --max-pages N` - recursive crawls with status
   polling, content streaming, WARC/HAR artifacts. Post-download:
   `crawl parse har-list|har-get|warc-list|warc-get` reads the artifact
@@ -112,34 +109,19 @@ budget small.
 with `?key=<API_KEY>`. Official SDKs: Python, TypeScript, Go, Rust. See
 [docs.scrapfly.io](https://scrapfly.io/docs).
 
-## Authentication & global config
+## Authentication
 
-Set credentials once:
+Set once:
 
 ```bash
-scrapfly config set api-key scp-live-...
-# or env:
 export SCRAPFLY_API_KEY=scp-live-...
+# or, persisted:
+scrapfly config set-key scp-live-...
 ```
 
-Set product defaults that auto-apply to every command supporting them:
-
-```bash
-scrapfly config set asp true          # scrape + crawl
-scrapfly config set country us        # scrape + screenshot + crawl
-scrapfly config set format markdown   # scrape
-scrapfly config set render-js true    # scrape
-scrapfly config set proxy-pool public_residential_pool
-scrapfly config set cache true
-scrapfly config set debug true
-scrapfly config view --pretty         # show what's stored
-scrapfly config unset asp             # revert to no default
-```
-
-Resolution order (highest wins):
-  1. Explicit `--flag` on the command
-  2. Environment variable (`SCRAPFLY_API_KEY`, etc.)
-  3. `~/.scrapfly/config.json`
+Resolution order: `--api-key` flag > `SCRAPFLY_API_KEY` env >
+`~/.scrapfly/config.json`. Dev / self-hosted stacks: `--host` and
+`--browser-host`, or `SCRAPFLY_API_HOST` / `SCRAPFLY_BROWSER_HOST`.
 
 LLM providers for `agent` mode use their own env vars:
 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `OLLAMA_HOST`.
@@ -181,36 +163,18 @@ body directly to stdout with no envelope (handy for pipes).
 | `browser slide <source> --target <sel> \| --distance <px>` | Antibot.clickAndSlide (slider captchas) |
 | `browser scroll <direction> [--amount px --ref e3]` | Input wheel event |
 | `browser screenshot [--fullpage]` | PNG via Page.captureScreenshot; use `-o/-O` for the file |
-| `browser content` | Default: metadata only (URL/status/headers/size). `--raw` for body, `--json` for full envelope |
-| `browser response` | Page.getNavigationResponse - redirect chain + final status/headers |
-| `browser request <glob> [--body] [--body-only]` | Filter captured Network.responseReceived by URL glob (`*`, `?`). `--body-only` pipes first match body |
-| `browser download <url>` | Download a file (PDF, image, ZIP). Tries ScrapiumBrowser native download, falls back to fetch(). `-o` / `-O` for output. |
+| `browser content [--raw] [--skip-iframes]` | Page.getRenderedContent - HTML with iframes inlined |
 | `browser eval <js>` | Runtime.evaluate with awaitPromise |
 
 ### Locators
 
-`click` / `fill` / `scroll --ref` accept any of:
-- **`ai:<description>`** - LLM picks the best ref from the AXTree (`scrapfly browser click 'ai:sign in button'`). Works with any configured LLM provider.
+`click` / `fill` accept any of:
 - **AXTree ref** - `e3`, taken from the last `snapshot`. Uses raw `Input.*` path.
 - **CSS selector** (default) - `input[name=username]`
 - **XPath** - `//button[text()="Submit"]` with `--selector-type xpath`
 - **AX node id** - `42` from snapshot's `ax_node_id` field with `--selector-type axNodeId`
 
 For CSS/XPath/axNodeId the CLI goes through Antibot on Scrapfly's browser.
-
-Dedicated AI subcommands also exist: `fill-ai "<description>" <value>` and
-`click-ai "<description>"`.
-
-### Offline selector finder
-
-```bash
-scrapfly selector "the first product price" --file page.html
-scrapfly selector "login button" --url https://example.com --want-text "Sign in"
-```
-
-Loads HTML (from `--file`, `--url`, or stdin), asks the LLM for a CSS
-selector, verifies with goquery (match count + text), retries up to
-`--attempts` on miss. Returns `{selector, match_count, sample_text}`.
 
 ## Crawler reference
 
@@ -356,44 +320,6 @@ client (Claude Desktop, Cursor, Claude Code):
 Selector discovery also works from inside the agent loop via the
 `find_selector` tool - useful when the model wants to produce a durable
 CSS selector instead of relying on per-snapshot refs.
-
-### Playwright MCP bridge
-
-For the full Playwright tool surface (navigate, click, fill, screenshot,
-pdf, ...) backed by Scrapfly's anti-bot browser:
-
-```jsonc
-{
-  "mcpServers": {
-    "scrapfly-playwright": {
-      "command": "scrapfly",
-      "args": ["mcp", "playwright", "--country", "us"],
-      "env": { "SCRAPFLY_API_KEY": "scp-live-..." }
-    }
-  }
-}
-```
-
-Requires Node.js. Runs `npx @playwright/mcp --cdp-url <url>`
-under the hood, pointing Playwright at a Scrapfly-minted CDP URL.
-
-### Record and replay
-
-```bash
-scrapfly browser --session demo start --record session.jsonl &
-scrapfly browser navigate https://example.com
-scrapfly browser fill 'ai:username' admin
-scrapfly browser click 'ai:submit'
-scrapfly browser stop
-
-# Replay against a new session
-scrapfly browser --session demo2 start &
-scrapfly browser replay session.jsonl --delay 500
-```
-
-`--record <file>` on `start` appends every dispatched action as a JSON
-line. `replay <file>` reads the .jsonl and dispatches each action to the
-active daemon. `--dry-run` prints without executing.
 
 ## Reference
 

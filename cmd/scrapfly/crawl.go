@@ -115,13 +115,7 @@ func bindCrawlStartFlags(cmd *cobra.Command, f *crawlStartFlags) {
 	cmd.Flags().StringVar(&f.extractionRulesFile, "extraction-rules-file", "", "path to JSON file with extraction rules map")
 }
 
-func buildCrawlerConfig(cmd *cobra.Command, url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig, error) {
-	// Apply config-file defaults for the product fields crawl supports.
-	applyProductDefaults(cmd, map[string]*string{
-		"country": &f.country, "proxy-pool": &f.proxyPool,
-	}, map[string]*bool{
-		"asp": &f.asp, "cache": &f.cache,
-	})
+func buildCrawlerConfig(url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig, error) {
 	cfg := &scrapfly.CrawlerConfig{
 		URL:                       url,
 		PageLimit:                 f.pageLimit,
@@ -205,7 +199,7 @@ func newCrawlStartCmd(flags *rootFlags) *cobra.Command {
 		Example: `  scrapfly crawl start https://example.com --max-pages 50 --max-depth 2`,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := buildCrawlerConfig(cmd, args[0], &f)
+			cfg, err := buildCrawlerConfig(args[0], &f)
 			if err != nil {
 				return err
 			}
@@ -467,7 +461,7 @@ func newCrawlRunCmd(flags *rootFlags) *cobra.Command {
     --max-pages 20 --content-format markdown --poll-interval 5s --max-wait 15m`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := buildCrawlerConfig(cmd, args[0], &f)
+			cfg, err := buildCrawlerConfig(args[0], &f)
 			if err != nil {
 				return err
 			}

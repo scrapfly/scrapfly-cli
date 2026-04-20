@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "0.2.1"
+var version = "0.2.0"
 
 type rootFlags struct {
 	apiKey      string
@@ -25,20 +26,31 @@ type rootFlags struct {
 // knownSubcommands lists top-level subcommand names (and aliases) used by the
 // root shortcut to tell "scrapfly https://..." from "scrapfly scrape ...".
 var knownSubcommands = map[string]struct{}{
-	"scrape": {}, "scraper": {}, "download": {}, "screenshot": {}, "extract": {},
+	"scrape": {}, "scraper": {}, "screenshot": {}, "extract": {},
 	"crawl": {}, "account": {}, "status": {}, "config": {},
 	"browser": {}, "agent": {}, "selector": {}, "mcp": {},
-	"version": {}, "help": {}, "completion": {}, "__complete": {},
+	"update": {}, "version": {}, "help": {}, "completion": {}, "__complete": {},
 }
 
 // rewriteURLShortcut inserts "scrape" before the first URL-looking arg, as
 // long as no known subcommand appears earlier. Lets users write
 // `scrapfly --pretty https://example.com` instead of `scrapfly scrape ...`.
+//
+// Must be careful NOT to treat flag values as positional URLs: when the
+// previous arg looks like a flag (`--host`, `-h`, ...) and has no `=`,
+// the URL belongs to that flag, not the shortcut.
 func rewriteURLShortcut(args []string) []string {
 	for i, a := range args {
 		lc := strings.ToLower(a)
 		if !(strings.HasPrefix(lc, "http://") || strings.HasPrefix(lc, "https://")) {
 			continue
+		}
+		// Skip if this URL is the value of a preceding --flag (no `=`).
+		if i > 0 {
+			prev := args[i-1]
+			if strings.HasPrefix(prev, "-") && !strings.Contains(prev, "=") {
+				continue
+			}
 		}
 		for _, prev := range args[:i] {
 			if _, isCmd := knownSubcommands[strings.ToLower(prev)]; isCmd {
@@ -98,6 +110,31 @@ Examples:
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Non-blocking update check that fires at most once per
+			// updateCheckCacheTTL (~24h). Emits a one-line stderr hint
+			// when a newer release is available. Skip when:
+			//   - user is already running `scrapfly update ...` (noise)
+			//   - running MCP stdio transport (stderr could confuse hosts)
+			//   - SCRAPFLY_NO_UPDATE_CHECK=1 (explicit opt-out, for CI)
+			if os.Getenv("SCRAPFLY_NO_UPDATE_CHECK") == "1" {
+				return
+			}
+			name := cmd.Name()
+			if name == "update" || name == "mcp" || name == "version" {
+				// version runs its own nag so we don't duplicate.
+				return
+			}
+			// Also skip for any command whose parent chain includes mcp.
+			for p := cmd.Parent(); p != nil; p = p.Parent() {
+				if p.Name() == "mcp" {
+					return
+				}
+			}
+			if nag := maybeUpdateNag(); nag != "" {
+				fmt.Fprintln(os.Stderr, nag)
+			}
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if showStatus {
 				return runStatus(&flags)
@@ -118,7 +155,6 @@ Examples:
 	root.PersistentFlags().BoolVar(&showStatus, "status", false, "print CLI + auth + usage status and exit (runs before subcommand)")
 
 	root.AddCommand(newScrapeCmd(&flags))
-	root.AddCommand(newDownloadCmd(&flags))
 	root.AddCommand(newScreenshotCmd(&flags))
 	root.AddCommand(newExtractCmd(&flags))
 	root.AddCommand(newCrawlCmd(&flags))
@@ -129,6 +165,7 @@ Examples:
 	root.AddCommand(newAgentCmd(&flags))
 	root.AddCommand(newSelectorCmd(&flags))
 	root.AddCommand(newMcpCmd(&flags))
+	root.AddCommand(newUpdateCmd(&flags))
 	root.AddCommand(newVersionCmd())
 
 	root.SetArgs(rewriteURLShortcut(args))

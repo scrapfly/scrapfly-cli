@@ -1,0 +1,499 @@
+=== github.com/scrapfly/scrapfly-cli/cmd/scrapfly ===
+
+
+=== github.com/scrapfly/scrapfly-cli/internal/cdp ===
+package cdp // import "github.com/scrapfly/scrapfly-cli/internal/cdp"
+
+Package cdp is a minimal Chrome DevTools Protocol client.
+
+It speaks raw JSON over a single WebSocket (no type generation, no event
+registry) — just enough to drive a Scrapfly-hosted Chromium through a small
+action vocabulary (open / snapshot / click / type / scroll / screenshot / eval).
+For heavier workloads, prefer chromedp + cdproto.
+
+The client is goroutine-safe for Call. A single reader pump dispatches responses
+back to the caller via id-keyed channels; events are buffered and delivered
+through WaitEvent.
+
+TYPES
+
+type AXNode struct {
+	Ref           string   `json:"ref"`        // e1, e2, ...
+	AXNodeID      string   `json:"ax_node_id"` // raw CDP Accessibility.AXNodeId
+	Role          string   `json:"role,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	Value         string   `json:"value,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	BackendNodeID int64    `json:"backend_node_id,omitempty"`
+	ChildRefs     []string `json:"children,omitempty"`
+}
+    AXNode is a compact view over a single Accessibility node. Fields mirror the
+    CDP `AXNode` shape but only what the model needs to reason.
+
+    AXNodeID is the raw CDP accessibility-tree node id. Pass it directly
+    as {type:"axNodeId", query: ax_node_id} to Antibot commands to skip DOM
+    resolution.
+
+type AXVal struct {
+	Type  string          `json:"type"`
+	Value json.RawMessage `json:"value,omitempty"`
+}
+    AXVal mirrors CDP's AXValue — a typed wrapper around a string/number/bool.
+
+type Client struct {
+	// Has unexported fields.
+}
+    Client is a CDP session over a single WebSocket.
+
+func Dial(ctx context.Context, wsURL string) (*Client, error)
+    Dial connects to a CDP WebSocket URL (typically wss://browser.scrapfly.io/
+    ?api_key=...). Pass a derived ctx for dial cancellation.
+
+func (c *Client) Call(ctx context.Context, method string, params any, sessionID string) (json.RawMessage, error)
+    Call sends method+params and waits for the matching response.
+
+func (c *Client) Close() error
+    Close closes the underlying WebSocket. Any pending Call returns the close
+    error.
+
+func (c *Client) WaitEvent(ctx context.Context, method string, match func(json.RawMessage) bool) (json.RawMessage, error)
+    WaitEvent blocks until an event with the given method (and optional
+    predicate match) is observed. Buffered events are drained first.
+
+type Message struct {
+	ID        int             `json:"id,omitempty"`
+	Method    string          `json:"method,omitempty"`
+	Params    json.RawMessage `json:"params,omitempty"`
+	Result    json.RawMessage `json:"result,omitempty"`
+	Error     *RPCError       `json:"error,omitempty"`
+	SessionID string          `json:"sessionId,omitempty"`
+}
+    Message is the on-wire envelope for both calls and events. Responses carry
+    ID + Result (or Error). Events carry Method + Params (no ID).
+
+type RPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    string `json:"data,omitempty"`
+}
+    RPCError mirrors the CDP error envelope.
+
+func (e *RPCError) Error() string
+
+type Selector struct {
+	Type  string `json:"type"` // "css" | "xpath" | "axNodeId" | "coord"
+	Query string `json:"query"`
+}
+    Selector is Antibot's element locator shape: {type, query}.
+
+func CSSSelector(q string) Selector
+    CSSSelector returns a Selector for a CSS query.
+
+func XPathSelector(q string) Selector
+    XPathSelector returns a Selector for an XPath query.
+
+type Session struct {
+	Client    *Client
+	TargetID  string
+	SessionID string
+
+	// RefTable maps model-facing refs ("e1", "e2", ...) to the backend DOM node
+	// IDs captured by the most recent Snapshot. Refs are stable only until the
+	// next Snapshot call.
+	RefTable map[string]int64
+}
+    Session is a CDP page-level context: browser connection + attached target
+    (tab) session id + a rolling AXTree ref table for action references.
+
+func Attach(ctx context.Context, c *Client) (*Session, error)
+    Attach opens a fresh page target and attaches a flat session to it,
+    ready for Page/DOM/Input/Accessibility calls. The caller must hold onto the
+    returned Session for subsequent actions.
+
+func (s *Session) BackendIDForRef(ref string) (int64, bool)
+    BackendIDForRef looks up the CDP backendNodeId previously captured for a
+    snapshot ref. Returns (0, false) if the ref is unknown.
+
+func (s *Session) Call(ctx context.Context, method string, params any) (json.RawMessage, error)
+    Call proxies a CDP call scoped to this session.
+
+func (s *Session) Click(ctx context.Context, locator string) (map[string]any, error)
+    Click performs a left-button press+release at the locator's center.
+    Locator is either an AXTree ref ("e3") or a CSS selector (e.g.
+    "button[type=submit]").
+
+    CSS selectors go through Antibot.clickOn for human-like timing; refs use the
+    raw Input.dispatchMouseEvent path (no Antibot axNodeId translation yet since
+    our RefTable keys are DOM backend ids, not AX ids).
+
+func (s *Session) ClickAndSlide(ctx context.Context, source Selector, opts SlideOptions) (map[string]any, error)
+
+func (s *Session) ClickAntibot(ctx context.Context, sel Selector, button string, clickCount int) (map[string]any, error)
+    ClickAntibot performs a human-like click on the matched element.
+
+func (s *Session) Detach(ctx context.Context) error
+    Detach closes the tab. The browser session itself stays alive (stop it with
+    `scrapfly browser close <session-id>`).
+
+func (s *Session) Eval(ctx context.Context, js string) (any, error)
+    Eval runs Runtime.evaluate and returns the result (string representation).
+
+func (s *Session) Fill(ctx context.Context, locator, text string) (map[string]any, error)
+    Fill focuses the locator and inserts text. Locator is an AXTree ref ("e3")
+    or a CSS selector.
+
+    CSS selectors use Antibot.fill (click + clear + char-by-char typing with
+    human WPM). Refs fall back to Input.insertText.
+
+func (s *Session) FillAntibot(ctx context.Context, sel Selector, text string, clear bool, wpm float64) (map[string]any, error)
+    FillAntibot types into the matched element with human-like WPM timing via
+    the Scrapfly Antibot domain. Clears first when clear=true.
+
+func (s *Session) Open(ctx context.Context, url string) (map[string]any, error)
+    Open navigates the attached page to url and waits for the load event.
+
+func (s *Session) RenderedContent(ctx context.Context, renderIframes bool) (content, contentType string, err error)
+    RenderedContent returns the fully rendered page content — HTML with
+    iframes inlined for text types; base64 bytes for binaries. Default is
+    renderIframe=true.
+
+func (s *Session) Screenshot(ctx context.Context, fullPage bool) ([]byte, error)
+    Screenshot returns the PNG bytes of the viewport.
+
+func (s *Session) Scroll(ctx context.Context, direction string, amount float64, locator string) (map[string]any, error)
+    Scroll dispatches a wheel event; direction "down"/"up"/"left"/"right",
+    amount in CSS pixels. If ref is non-empty, scrolls with that element as
+    anchor; otherwise uses the viewport center.
+
+func (s *Session) Snapshot(ctx context.Context) ([]AXNode, error)
+    Snapshot captures the current page's full accessibility tree, builds a
+    compact ref table (e1, e2, ...), and returns the flat list in document
+    order. The Session's RefTable is replaced.
+
+func (s *Session) WaitForElement(ctx context.Context, sel Selector, timeoutMs int, visible bool) (map[string]any, error)
+    WaitForElement polls natively (no JS) until the selector resolves. timeout
+    defaults to 10s server-side. visible adds display/opacity check.
+
+type SlideOptions struct {
+	Target         *Selector
+	Distance       float64 // px, used if Target is nil
+	VerticalOffset float64
+	Button         string
+	Overshoot      bool
+}
+    ClickAndSlide runs the "slider captcha" primitive: press-and-hold on the
+    source element, slide to target, release. One of {Distance, Target} must be
+    set.
+
+
+=== github.com/scrapfly/scrapfly-cli/internal/llm ===
+package llm // import "github.com/scrapfly/scrapfly-cli/internal/llm"
+
+Package llm is a provider-agnostic interface over LLM chat + tool-use APIs.
+
+The design mirrors browser-use's Python Protocol: one Chat method,
+provider-specific adapters translate between this common shape and the
+respective official SDK (Anthropic, OpenAI, Gemini, Ollama/OpenAI-compat).
+
+The agent loop in cmd/scrapfly imports THIS package, never a provider package
+directly. Selection is by name at construction time.
+
+CONSTANTS
+
+const (
+	RoleSystem    = "system"
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleTool      = "tool"
+)
+    Role values on a Message.
+
+
+VARIABLES
+
+var ErrNoAPIKey = errors.New("no API key configured for this provider")
+    ErrNoAPIKey is returned when a provider is selected but its credential is
+    missing from both flags and env.
+
+
+FUNCTIONS
+
+func Register(name string, f Factory)
+    Register adds a provider factory by name. Called from provider packages'
+    init().
+
+func Registered() []string
+    Registered returns sorted provider names. Useful for help text.
+
+
+TYPES
+
+type ChatRequest struct {
+	Model       string    // per-provider model id; empty → provider default
+	System      string    // system prompt (cacheable where supported)
+	Messages    []Message // rolling conversation
+	Tools       []Tool
+	MaxTokens   int     // 0 → provider default
+	Temperature float64 // 0 → provider default
+	ToolChoice  string  // "auto" | "any" | "required" | "" (= auto)
+}
+    ChatRequest is the common input to Provider.Chat.
+
+type ChatResponse struct {
+	Text       string
+	ToolCalls  []ToolCall
+	Usage      Usage
+	StopReason StopReason
+}
+    ChatResponse is the common output from Provider.Chat.
+
+type Factory func(Options) (Provider, error)
+    Factory is a per-provider constructor registered at init time. Adapters
+    self-register to avoid import cycles.
+
+type Message struct {
+	Role       string     `json:"role"`
+	Content    string     `json:"content,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	IsError    bool       `json:"is_error,omitempty"` // only for role=tool
+}
+    Message is a turn in the conversation.
+
+      - role=system : Content is the system prompt (usually set via
+        ChatRequest.System; this role exists for providers that don't separate
+        it, e.g. OpenAI).
+      - role=user : Content is the user text.
+      - role=assistant : Content is free text; ToolCalls carries any tool calls.
+      - role=tool : ToolCallID + Content (stringified tool result).
+
+type Options struct {
+	Provider string // anthropic|openai|gemini|ollama
+	APIKey   string
+	Model    string
+	BaseURL  string // for OpenAI-compatible endpoints (ollama, vLLM, ...)
+}
+    Options holds user-supplied overrides for provider construction. Empty
+    fields fall back to env / defaults.
+
+type Provider interface {
+	Name() string
+	Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error)
+}
+    Provider is the single interface each LLM adapter must satisfy.
+
+func Autodetect(opts Options) (Provider, error)
+    Autodetect picks a provider by inspecting env vars, in order of preference:
+    ANTHROPIC_API_KEY → OPENAI_API_KEY → GEMINI_API_KEY → OLLAMA_HOST → first
+    registered. Opts (including explicit Provider) always win.
+
+func New(name string, opts Options) (Provider, error)
+    New constructs a Provider by name.
+
+type StopReason string
+    StopReason classifies why the model stopped producing output.
+
+const (
+	StopEndTurn   StopReason = "end_turn"
+	StopToolUse   StopReason = "tool_use"
+	StopMaxTokens StopReason = "max_tokens"
+	StopOther     StopReason = "other"
+)
+type Tool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"input_schema"` // JSON Schema (draft 2020-12 works for all)
+}
+    Tool is a provider-agnostic function definition.
+
+type ToolCall struct {
+	ID    string          `json:"id"`
+	Name  string          `json:"name"`
+	Input json.RawMessage `json:"input"`
+}
+    ToolCall is a single function invocation emitted by the model.
+
+type Usage struct {
+	InputTokens      int `json:"input_tokens"`
+	OutputTokens     int `json:"output_tokens"`
+	CacheReadTokens  int `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+}
+    Usage holds token accounting (best-effort per provider).
+
+
+=== github.com/scrapfly/scrapfly-cli/internal/llm/anthropic ===
+package anthropic // import "github.com/scrapfly/scrapfly-cli/internal/llm/anthropic"
+
+Package anthropic adapts github.com/anthropics/anthropic-sdk-go to the
+llm.Provider interface. System prompt and tool definitions are cached
+automatically (ephemeral prompt cache) to cut cost on long agent loops.
+
+=== github.com/scrapfly/scrapfly-cli/internal/llm/gemini ===
+package gemini // import "github.com/scrapfly/scrapfly-cli/internal/llm/gemini"
+
+Package gemini adapts google.golang.org/genai to the llm.Provider interface.
+Uses the Gemini Developer API by default (GEMINI_API_KEY env); set BaseURL or
+switch credentials for Vertex AI.
+
+=== github.com/scrapfly/scrapfly-cli/internal/llm/ollama ===
+package ollama // import "github.com/scrapfly/scrapfly-cli/internal/llm/ollama"
+
+Package ollama re-exports the OpenAI adapter pointed at a local Ollama server.
+Ollama speaks the OpenAI chat-completion wire format, so the adapter is a
+10-line shim.
+
+=== github.com/scrapfly/scrapfly-cli/internal/llm/openai ===
+package openai // import "github.com/scrapfly/scrapfly-cli/internal/llm/openai"
+
+Package openai adapts github.com/openai/openai-go to the llm.Provider interface.
+Also drives OpenAI-compatible endpoints (Ollama, vLLM, ...) when Options.BaseURL
+is set — see the ollama subpackage for a convenience factory.
+
+FUNCTIONS
+
+func New(opts llm.Options, providerName, envKey, fallbackModel string) (llm.Provider, error)
+    New exposes construction for sibling packages (ollama) that reuse this
+    adapter with a different base URL and env var name.
+
+
+=== github.com/scrapfly/scrapfly-cli/internal/out ===
+package out // import "github.com/scrapfly/scrapfly-cli/internal/out"
+
+
+FUNCTIONS
+
+func Pretty(w io.Writer, format string, args ...any)
+    Pretty prints a short human line to w. Used by individual commands as their
+    pretty-mode summary.
+
+func WriteError(w io.Writer, pretty bool, product string, err error) error
+    WriteError writes an error envelope to w. Always emits JSON even in pretty
+    mode — easier for LLM callers to diagnose regardless of flag.
+
+func WriteSuccess(w io.Writer, pretty bool, product string, data any) error
+    WriteSuccess writes a success envelope. When pretty is true, the caller is
+    responsible for having written the human summary first; this function emits
+    nothing in that case to avoid duplicating the payload.
+
+
+TYPES
+
+type Envelope struct {
+	Success bool           `json:"success"`
+	Product string         `json:"product,omitempty"`
+	Data    any            `json:"data,omitempty"`
+	Error   *EnvelopeError `json:"error,omitempty"`
+}
+
+type EnvelopeError struct {
+	Code       string `json:"code,omitempty"`
+	Message    string `json:"message"`
+	HTTPStatus int    `json:"http_status,omitempty"`
+	Hint       string `json:"hint,omitempty"`
+	Retryable  bool   `json:"retryable,omitempty"`
+}
+
+
+=== github.com/scrapfly/scrapfly-cli/internal/sessiond ===
+package sessiond // import "github.com/scrapfly/scrapfly-cli/internal/sessiond"
+
+Package sessiond runs a persistent Scrapfly Browser session in the foreground
+and serves actions to local CLI invocations over a Unix domain socket. The
+daemon holds:
+
+  - the CDP WebSocket connection to the Scrapfly Browser,
+  - the attached cdp.Session (with enabled domains + RefTable),
+
+so that multiple `scrapfly browser <action>` calls can share refs and cookies
+without re-attaching a fresh tab each time.
+
+Wire format on the socket is newline-delimited JSON. One request per connection;
+one response per request; then close.
+
+FUNCTIONS
+
+func ClearCurrent(sessionID string) error
+    ClearCurrent removes the active-session marker. Called by stop.
+
+func PathsFor(sessionID string) (sock, meta string, err error)
+    PathsFor returns the socket + metadata paths for a session id.
+
+func ReadCurrent() string
+    ReadCurrent returns the recorded active session id, or "" if none.
+
+func Resolve(explicit string) (string, bool)
+    Resolve picks a session id in priority order:
+     1. the explicit flag value (if non-empty)
+     2. the SCRAPFLY_SESSION env var
+     3. the ~/.scrapfly/sessions/.current file
+
+    Returns ("", false) when nothing is available.
+
+func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock string)) error
+    Serve runs the daemon until ctx is cancelled or a SIGINT/SIGTERM is
+    received. It attaches to wsURL, writes <sessionID>.json + .sock under
+    ~/.scrapfly/sessions/, serves requests, and cleans up on exit.
+
+    The daemon is foreground: the caller is responsible for backgrounding (`&`,
+    systemd, tmux). `onReady` is invoked once the socket is listening.
+
+func SetCurrent(sessionID string) error
+    SetCurrent records sessionID as the active session for later invocations.
+
+func SocketDir() (string, error)
+    SocketDir returns (and creates) the per-user directory that holds session
+    sockets + metadata. Files live at <dir>/<session>.sock and <session>.json.
+
+
+TYPES
+
+type Meta struct {
+	SessionID string    `json:"session_id"`
+	WSURL     string    `json:"ws_url"`
+	PID       int       `json:"pid"`
+	StartedAt time.Time `json:"started_at"`
+}
+    Meta is persisted alongside the socket to record daemon info for status
+    queries.
+
+func LoadMeta(sessionID string) (*Meta, error)
+    LoadMeta reads the persisted metadata for a session, or nil if absent.
+
+type Request struct {
+	Action    string  `json:"action"`
+	URL       string  `json:"url,omitempty"`
+	Ref       string  `json:"ref,omitempty"`
+	Text      string  `json:"text,omitempty"`
+	Direction string  `json:"direction,omitempty"`
+	Amount    float64 `json:"amount,omitempty"`
+	FullPage  bool    `json:"fullpage,omitempty"`
+	JS        string  `json:"js,omitempty"`
+	// Antibot / Scrapfly extras.
+	Selector       string  `json:"selector,omitempty"`      // CSS selector (default) or XPath when SelectorType is "xpath"
+	SelectorType   string  `json:"selector_type,omitempty"` // "css" | "xpath" (default "css")
+	TimeoutMs      int     `json:"timeout_ms,omitempty"`
+	Visible        bool    `json:"visible,omitempty"`
+	RenderIframes  *bool   `json:"render_iframes,omitempty"` // default true on content
+	Clear          bool    `json:"clear,omitempty"`
+	WPM            float64 `json:"wpm,omitempty"`
+	TargetSelector string  `json:"target_selector,omitempty"`
+	Distance       float64 `json:"distance,omitempty"`
+	// Raw lets callers send arbitrary action JSON for future actions
+	// without adding a field here. Unused today.
+	Raw json.RawMessage `json:"raw,omitempty"`
+}
+    Request is one action sent from a CLI process to the daemon.
+
+type Response struct {
+	OK    bool            `json:"ok"`
+	Data  json.RawMessage `json:"data,omitempty"`
+	Error string          `json:"error,omitempty"`
+}
+    Response is the envelope written back per request.
+
+func Send(sessionID string, req Request) (*Response, error)
+    Send opens the session's socket, writes one request, reads one response.
+    Returned err covers transport + decoded Response.Error.
+
+

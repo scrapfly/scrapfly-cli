@@ -15,9 +15,9 @@
 #   --repo   <org/repo>  override the source repo. Default: scrapfly/scrapfly-cli.
 #
 # Artifacts expected in the release:
-#   scrapfly-macos-amd64    (also arm64)
-#   scrapfly-linux-amd64    (also arm64)
-#   scrapfly-windows-amd64.exe (also arm64; manual install on Windows)
+#   scrapfly-darwin-universal.tar.gz  (also amd64 / arm64)
+#   scrapfly-linux-amd64.tar.gz       (also arm64)
+#   scrapfly-windows-amd64.zip        (manual install on Windows)
 
 set -eu
 
@@ -41,7 +41,7 @@ done
 info()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 fatal() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-raw_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)
 case "$arch" in
   x86_64|amd64)  arch=amd64 ;;
@@ -49,10 +49,10 @@ case "$arch" in
   *) fatal "unsupported CPU: $arch" ;;
 esac
 
-case "$raw_os" in
-  darwin) os=macos  asset="scrapfly-macos-${arch}" ;;
-  linux)  os=linux  asset="scrapfly-linux-${arch}" ;;
-  *)      fatal "unsupported OS: $raw_os (Windows users: download scrapfly-windows-*.exe from GitHub Releases)" ;;
+case "$os" in
+  darwin) asset="scrapfly-darwin-universal.tar.gz" ;;
+  linux)  asset="scrapfly-linux-${arch}.tar.gz" ;;
+  *)      fatal "unsupported OS: $os (Windows users: download the .zip from GitHub Releases)" ;;
 esac
 
 if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
@@ -64,6 +64,21 @@ fi
 
 info "target: $os-$arch ($asset)"
 info "source: $url"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+if command -v curl >/dev/null 2>&1; then
+  curl -fSL "$url" -o "$tmp/asset.tar.gz"
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO "$tmp/asset.tar.gz" "$url"
+else
+  fatal "need curl or wget"
+fi
+
+tar -xzf "$tmp/asset.tar.gz" -C "$tmp"
+binary="$tmp/scrapfly"
+[ -f "$binary" ] || fatal "archive did not contain ./scrapfly"
 
 # Resolve final path. --dest wins; otherwise fall back from --prefix to
 # $HOME/.local/bin when the prefix isn't writable.
@@ -77,20 +92,13 @@ if [ -z "$DEST" ]; then
   fi
 fi
 mkdir -p "$(dirname "$DEST")"
-
-if command -v curl >/dev/null 2>&1; then
-  curl -fSL "$url" -o "$DEST"
-elif command -v wget >/dev/null 2>&1; then
-  wget -qO "$DEST" "$url"
-else
-  fatal "need curl or wget"
-fi
+mv "$binary" "$DEST"
 chmod 0755 "$DEST"
 
 # macOS Gatekeeper: strip the quarantine attribute we inherit from the curl
 # download. Until the binary is notarized by an Apple Developer ID, this is
 # what lets `./scrapfly` run without a right-click-Open dance.
-if [ "$os" = "macos" ] && command -v xattr >/dev/null 2>&1; then
+if [ "$os" = "darwin" ] && command -v xattr >/dev/null 2>&1; then
   xattr -d com.apple.quarantine "$DEST" >/dev/null 2>&1 || true
 fi
 

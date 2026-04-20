@@ -54,10 +54,6 @@ type Request struct {
 	Raw json.RawMessage `json:"raw,omitempty"`
 }
 
-// RecordFile, when non-empty, causes Serve to append every dispatched
-// Request (as JSON lines) to this file. Used by `browser start --record`.
-var RecordFile string
-
 // Response is the envelope written back per request.
 type Response struct {
 	OK    bool            `json:"ok"`
@@ -232,14 +228,6 @@ func handle(ctx context.Context, s *cdp.Session, mu *sync.Mutex, c net.Conn, shu
 	// Serialize all session-mutating calls. Ping/refs/shutdown are cheap so
 	// we hold the mutex for them too for simplicity.
 	mu.Lock()
-	// Record the action before dispatching (append-only, best-effort).
-	if RecordFile != "" && req.Action != "ping" && req.Action != "shutdown" && req.Action != "refs" {
-		if f, err := os.OpenFile(RecordFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
-			line, _ := json.Marshal(req)
-			_, _ = f.Write(append(line, '\n'))
-			_ = f.Close()
-		}
-	}
 	data, err := dispatch(ctx, s, &req, shutdown)
 	mu.Unlock()
 	if err != nil {
@@ -347,72 +335,6 @@ func dispatch(ctx context.Context, s *cdp.Session, r *Request, shutdown func()) 
 			return nil, err
 		}
 		return marshal(res)
-	case "response":
-		entries, err := s.NavigationResponse(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return marshal(map[string]any{"entries": entries})
-	case "download":
-		if r.URL == "" {
-			return nil, fmt.Errorf("download requires url")
-		}
-		// Strategy 1: navigate and let ScrapiumBrowser catch the download.
-		// Chrome may render some types (PDF, images) inline rather than
-		// downloading; give it a few seconds then fall back to fetch().
-		func() {
-			_, navErr := s.Open(ctx, r.URL)
-			_ = navErr // ERR_ABORTED is expected for downloads
-		}()
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			has, err := s.HasDownloads(ctx)
-			if err != nil {
-				break
-			}
-			if has {
-				files, err := s.GetDownloads(ctx, true)
-				if err != nil {
-					return nil, err
-				}
-				return marshal(map[string]any{"files": files, "method": "scrapium"})
-			}
-			time.Sleep(500 * time.Millisecond)
-		}
-		// Strategy 2: fetch() in the browser context — works for any URL
-		// including those Chrome renders inline (PDF, images, etc.).
-		js := `(async () => {
-			const r = await fetch(` + jsonQuote(r.URL) + `);
-			const buf = await r.arrayBuffer();
-			const u8 = new Uint8Array(buf);
-			let bin = '';
-			for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
-			return {b64: btoa(bin), mime: r.headers.get('content-type') || '', status: r.status};
-		})()`
-		val, err := s.Eval(ctx, js)
-		if err != nil {
-			return nil, fmt.Errorf("fetch fallback: %w", err)
-		}
-		return marshal(map[string]any{"fetch": val, "method": "fetch"})
-	case "downloads_meta":
-		meta, err := s.GetDownloadsMetadata(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return marshal(map[string]any{"metadata": meta})
-	case "request":
-		pattern := r.Selector
-		if pattern == "" {
-			pattern = r.URL
-		}
-		if pattern == "" {
-			pattern = "*"
-		}
-		results, err := s.MatchedRequests(ctx, pattern, r.Visible) // reusing Visible as includeBody
-		if err != nil {
-			return nil, err
-		}
-		return marshal(map[string]any{"matches": results, "count": len(results)})
 	case "refs":
 		// Diagnostic: return the current ref table.
 		return marshal(s.RefTable)
@@ -428,11 +350,6 @@ func dispatch(ctx context.Context, s *cdp.Session, r *Request, shutdown func()) 
 		return marshal(map[string]string{"status": "shutting down"})
 	}
 	return nil, fmt.Errorf("unknown action %q", r.Action)
-}
-
-func jsonQuote(s string) string {
-	b, _ := json.Marshal(s)
-	return string(b)
 }
 
 func makeSelector(r *Request) cdp.Selector {
