@@ -1,5 +1,11 @@
 name: release
 
+# Tag-triggered release pipeline. Three parallel goreleaser build jobs
+# produce per-OS archives as ephemeral GitHub Actions artifacts, then a
+# single `publish` job downloads them all, creates the GH release with
+# every asset attached, and publishes the npm wrapper. Nothing is
+# published anywhere if any build fails.
+
 on:
   push:
     tags:
@@ -13,22 +19,17 @@ on:
 
 permissions:
   contents: write
+  id-token: write   # OIDC provenance for npm publish
 
 jobs:
-  # ── 1. Stand up an empty draft release that all three goreleaser jobs
-  #    will upload archives into. Running this first means the three OS
-  #    jobs can run fully in parallel without racing to create the release.
-  create-release:
+  # ── Resolve the target tag once so every downstream job agrees on it.
+  resolve-tag:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.tag.outputs.tag }}
+      tag: ${{ steps.t.outputs.tag }}
+      version: ${{ steps.t.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Resolve tag
-        id: tag
+      - id: t
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag }}"
@@ -36,126 +37,151 @@ jobs:
             TAG="${GITHUB_REF_NAME}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure draft release exists
+  # ── Three parallel build jobs — one per OS. Each runs goreleaser with
+  #    --skip=publish so nothing hits GitHub Releases yet; archives land
+  #    as actions artifacts that the `publish` job assembles.
+  build-darwin:
+    runs-on: macos-latest
+    needs: resolve-tag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git checkout ${{ needs.resolve-tag.outputs.tag }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --skip=publish --config .goreleaser.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-darwin
+          path: |
+            dist/*.tar.gz
+            dist/checksums-darwin.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: resolve-tag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git checkout ${{ needs.resolve-tag.outputs.tag }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --skip=publish --config .goreleaser-linux.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux
+          path: |
+            dist/*.tar.gz
+            dist/checksums-linux.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  build-windows:
+    runs-on: ubuntu-latest
+    needs: resolve-tag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git checkout ${{ needs.resolve-tag.outputs.tag }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --skip=publish --config .goreleaser-windows.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: |
+            dist/*.zip
+            dist/checksums-windows.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── All builds passed: collect artifacts, cut the GH release with every
+  #    asset attached, publish the npm wrapper pointing at this tag, and
+  #    move the `latest` git tag. Atomic from the user's POV — if any
+  #    single step fails the release is visible as broken, not partial.
+  publish:
+    runs-on: ubuntu-latest
+    needs: [resolve-tag, build-darwin, build-linux, build-windows]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List assembled assets
+        run: ls -la dist/
+
+      - name: Create GitHub release with all assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.resolve-tag.outputs.tag }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists — reusing as draft target."
+            gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$TAG" --draft --title "$TAG" --notes "Release $TAG"
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes "Release $TAG" \
+              --latest \
+              dist/*
           fi
 
-  # ── 2a/2b/2c. Three isolated parallel goreleaser jobs — one per OS.
-  #    Each uses its own config, its own checksum file, and uploads into
-  #    the draft created above (use_existing_draft: true in each YAML).
-  release-darwin:
-    runs-on: macos-latest
-    needs: create-release
-    steps:
-      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
+      - name: Pin npm wrapper version to tag
+        working-directory: packages/npm
+        run: npm version --no-git-tag-version "${{ needs.resolve-tag.outputs.version }}"
 
-      - name: Checkout release tag
-        run: git checkout ${{ needs.create-release.outputs.tag }}
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --clean --config .goreleaser.yaml
+      - name: Publish npm wrapper
+        working-directory: packages/npm
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  release-linux:
-    runs-on: ubuntu-latest
-    needs: create-release
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Checkout release tag
-        run: git checkout ${{ needs.create-release.outputs.tag }}
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --clean --config .goreleaser-linux.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  release-windows:
-    runs-on: ubuntu-latest
-    needs: create-release
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Checkout release tag
-        run: git checkout ${{ needs.create-release.outputs.tag }}
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --clean --config .goreleaser-windows.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── 3. Publish the draft and move the `latest` git tag. Runs after all
-  #    three OS jobs have landed their assets.
-  finalize:
-    runs-on: ubuntu-latest
-    needs: [release-darwin, release-linux, release-windows]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Resolve tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag }}"
-          else
-            TAG="${GITHUB_REF_NAME}"
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Publish draft release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: gh release edit "$TAG" --draft=false --latest
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
+        run: npm publish --access public --provenance
 
       - name: Force-move `latest` git tag
         # Only for tag pushes — skip on re-releases of older tags via
         # workflow_dispatch so we don't demote a newer `latest`.
         if: github.event_name == 'push'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.resolve-tag.outputs.tag }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

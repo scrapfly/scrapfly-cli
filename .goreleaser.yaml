@@ -44,10 +44,11 @@ checksum:
   name_template: checksums-darwin.txt
 
 release:
-  # Uploads into the draft the `create-release` job stood up; the `finalize`
-  # job publishes the draft after all three OS jobs land their assets.
-  use_existing_draft: true
-  draft: true
+  # The release workflow runs goreleaser with --skip=publish and uploads
+  # the dist/ artifacts via actions/upload-artifact; the publish job cuts
+  # the GitHub release. This `disable: true` is belt-and-braces in case a
+  # future invocation forgets --skip=publish.
+  disable: true
 
 changelog:
   sort: asc

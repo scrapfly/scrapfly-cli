@@ -34,9 +34,8 @@ checksum:
   name_template: checksums-linux.txt
 
 release:
-  # Let the `create-release` job stand up the draft; uploads here append.
-  use_existing_draft: true
-  draft: true
+  # GH release is cut by the publish job from collected actions artifacts.
+  disable: true
 
 changelog:
   disable: true
