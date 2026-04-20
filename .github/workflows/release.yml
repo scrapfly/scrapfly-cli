@@ -41,11 +41,6 @@ jobs:
           args: release --clean --config /tmp/.goreleaser.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Optional: if the scrapfly/homebrew-tap repo is provisioned and a
-          # HOMEBREW_TAP_TOKEN secret is configured, goreleaser will publish
-          # the Formula automatically. If the secret is missing, goreleaser
-          # skips the homebrew step with a warning rather than failing.
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
   goreleaser-linux-windows:
     runs-on: ubuntu-latest
@@ -71,35 +66,12 @@ jobs:
         with:
           distribution: goreleaser
           version: '~> v2'
-          args: release --clean --skip=publish --config /tmp/.goreleaser-linux-windows.yaml
+          # darwin job already created the GitHub Release; append linux/windows
+          # archives to it. No --skip=publish: goreleaser uploads directly,
+          # matching the naming the self-updater (cmd/scrapfly/update.go) expects.
+          args: release --clean --config /tmp/.goreleaser-linux-windows.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve release tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "RELEASE_TAG=${{ inputs.tag }}" >> $GITHUB_ENV
-          else
-            echo "RELEASE_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
-          fi
-
-      - name: Upload linux/windows artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # goreleaser v2 with format: binary leaves each binary in its
-          # per-target build dir (dist/scrapfly_linux_amd64_v1/scrapfly)
-          # but records the friendly release name (scrapfly-linux-amd64)
-          # in artifacts.json. Rehydrate to dist/<name> before upload.
-          jq -r '.[] | select(.type=="Binary") | "\(.path)\t\(.name)"' dist/artifacts.json | \
-            while IFS=$'\t' read -r src name; do
-              cp "$src" "dist/$name"
-            done
-          gh release upload "$RELEASE_TAG" \
-            dist/scrapfly-linux-* \
-            dist/scrapfly-windows-*.exe \
-            dist/checksums-linux-windows.txt \
-            --clobber
 
   update-latest-tag:
     # Move the `latest` git tag to point at the version tag we just released.
