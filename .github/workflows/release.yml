@@ -87,17 +87,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # goreleaser v2 with format: binary leaves each binary in its
-          # per-target build dir (dist/scrapfly_linux_amd64_v1/scrapfly)
-          # but records the friendly release name (scrapfly-linux-amd64)
-          # in artifacts.json. Rehydrate to dist/<name> before upload.
-          jq -r '.[] | select(.type=="Binary") | "\(.path)\t\(.name)"' dist/artifacts.json | \
-            while IFS=$'\t' read -r src name; do
-              cp "$src" "dist/$name"
-            done
+          # goreleaser archives linux as tar.gz and windows as zip; names
+          # follow `scrapfly-{os}-{arch}.{ext}` which is what the CLI's
+          # self-updater (cmd/scrapfly/update.go) expects.
           gh release upload "$RELEASE_TAG" \
-            dist/scrapfly-linux-* \
-            dist/scrapfly-windows-*.exe \
+            dist/*.tar.gz \
+            dist/*.zip \
             dist/checksums-linux-windows.txt \
             --clobber
 
