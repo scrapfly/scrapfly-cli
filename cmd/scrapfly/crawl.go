@@ -48,6 +48,7 @@ Subcommands:
 	cmd.AddCommand(newCrawlArtifactParseCmd(flags))
 	cmd.AddCommand(newCrawlContentsBatchCmd(flags))
 	cmd.AddCommand(newCrawlRunCmd(flags))
+	cmd.AddCommand(newCrawlWatchCmd(flags))
 	return cmd
 }
 
@@ -212,7 +213,10 @@ func newCrawlStartCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 			if flags.pretty {
-				out.Pretty(os.Stdout, "crawl %s started", start.CrawlerUUID)
+				out.Pretty(os.Stdout, "✓ Started crawl %s for %s", start.CrawlerUUID, args[0])
+				out.Pretty(os.Stdout, "")
+				out.Pretty(os.Stdout, "To watch it live, try:  scrapfly crawl watch %s", start.CrawlerUUID)
+				out.Pretty(os.Stdout, "To check once, try:     scrapfly crawl status %s", start.CrawlerUUID)
 				return nil
 			}
 			return out.WriteSuccess(os.Stdout, false, "crawl.start", start)
