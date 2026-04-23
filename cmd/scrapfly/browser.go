@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -10,6 +11,33 @@ import (
 	"github.com/scrapfly/scrapfly-cli/internal/sessiond"
 	"github.com/spf13/cobra"
 )
+
+// appendSolveCaptchaParam adds ?solve_captcha=true to a CDP WSS URL when the
+// caller opted in via --solve-captcha. This is a temporary shim: the Go SDK
+// version pinned in go.mod (v0.3.3) does not yet expose a SolveCaptcha field
+// on CloudBrowserConfig, but the Scrapfly API already honors the query param
+// and arms Antibot.captchaEnable on session start. Once the SDK ships the
+// field, delete this helper and set cfg.SolveCaptcha = f.solveCaptcha in
+// toConfig() instead.
+func appendSolveCaptchaParam(wsURL string, solveCaptcha bool) string {
+	if !solveCaptcha {
+		return wsURL
+	}
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		// Fall back to raw concat on parse failure — the Scrapfly URL always
+		// has a query string, so appending &solve_captcha=true is safe even
+		// when url.Parse misbehaves on an edge-case scheme.
+		if strings.Contains(wsURL, "?") {
+			return wsURL + "&solve_captcha=true"
+		}
+		return wsURL + "?solve_captcha=true"
+	}
+	q := u.Query()
+	q.Set("solve_captcha", "true")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
 
 func newBrowserCmd(flags *rootFlags) *cobra.Command {
 	var (
@@ -52,7 +80,7 @@ The WSS URL includes your API key as a query param — treat as a secret.`,
 			}
 			// No URL → print a CDP WSS URL (ws-mode).
 			if len(args) == 0 {
-				wsURL := client.CloudBrowser(launchCfg.toConfig())
+				wsURL := appendSolveCaptchaParam(client.CloudBrowser(launchCfg.toConfig()), launchCfg.solveCaptcha)
 				if flags.pretty {
 					fmt.Fprintln(os.Stdout, wsURL)
 					return nil
@@ -78,6 +106,13 @@ The WSS URL includes your API key as a query param — treat as a secret.`,
 			if err != nil {
 				return err
 			}
+			// --solve-captcha is applied to the returned CDP URL rather than
+			// the /unblock payload itself (SDK v0.3.3's UnblockConfig has no
+			// solve_captcha field yet). The Cloud Browser API arms
+			// Antibot.captchaEnable when the client connects with the param,
+			// so the effect is the same — the solver fires on the first page
+			// attach of the post-unblock CDP session.
+			res.WSURL = appendSolveCaptchaParam(res.WSURL, launchCfg.solveCaptcha)
 			if flags.pretty {
 				out.Pretty(os.Stdout, "session=%s run=%s ws=%s", res.SessionID, res.RunID, res.WSURL)
 				return nil
@@ -137,6 +172,7 @@ type browserLaunchFlags struct {
 	cache        bool
 	blacklist    bool
 	debug        bool
+	solveCaptcha bool
 	resolution   string
 	extensions   []string
 	browserBrand string
@@ -160,6 +196,7 @@ func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
 	cmd.Flags().BoolVar(&f.cache, "cache", false, "enable cache")
 	cmd.Flags().BoolVar(&f.blacklist, "blacklist", false, "enable blacklist enforcement")
 	cmd.Flags().BoolVar(&f.debug, "debug", false, "enable debug recording (playback/video)")
+	cmd.Flags().BoolVar(&f.solveCaptcha, "solve-captcha", false, "arm Scrapium's built-in captcha solver (Turnstile, DataDome, reCAPTCHA, geetest). Billed per solve. See https://scrapfly.io/docs/cloud-browser-api/captcha-solver")
 	cmd.Flags().StringVar(&f.resolution, "resolution", "", "viewport e.g. 1920x1080")
 	cmd.Flags().StringSliceVar(&f.extensions, "extension", nil, "extension id to attach (repeatable)")
 	cmd.Flags().StringVar(&f.browserBrand, "browser-brand", "", "chrome|edge|brave|opera")

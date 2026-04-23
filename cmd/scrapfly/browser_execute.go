@@ -105,7 +105,7 @@ envelope.`,
 				if err != nil {
 					return err
 				}
-				wsURL = res.WSURL
+				wsURL = appendSolveCaptchaParam(res.WSURL, launchArgs.solveCaptcha)
 				sessionID = res.SessionID
 				runID = res.RunID
 			default:
@@ -113,7 +113,7 @@ envelope.`,
 				if err != nil {
 					return err
 				}
-				wsURL = client.CloudBrowser(launchArgs.toConfig())
+				wsURL = appendSolveCaptchaParam(client.CloudBrowser(launchArgs.toConfig()), launchArgs.solveCaptcha)
 			}
 
 			cdpClient, err := cdp.Dial(ctx, wsURL)

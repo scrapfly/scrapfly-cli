@@ -57,14 +57,14 @@ Runs in the foreground; background it with & / systemd / tmux as you prefer.`,
 					if err != nil {
 						return err
 					}
-					wsURL = res.WSURL
+					wsURL = appendSolveCaptchaParam(res.WSURL, launchCfg.solveCaptcha)
 				case targetURL != "" && !unblock:
 					return fmt.Errorf("--url requires --unblock")
 				default:
 					// Copy sessionIDFlag into the launch config so Scrapfly
 					// pins the browser session identity.
 					launchCfg.session = sessionIDFlag
-					wsURL = client.CloudBrowser(launchCfg.toConfig())
+					wsURL = appendSolveCaptchaParam(client.CloudBrowser(launchCfg.toConfig()), launchCfg.solveCaptcha)
 				}
 			}
 

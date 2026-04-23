@@ -200,9 +200,9 @@ traces go to stderr when --verbose is set.`,
 					if err != nil {
 						return err
 					}
-					wsURL = res.WSURL
+					wsURL = appendSolveCaptchaParam(res.WSURL, launchArgs.solveCaptcha)
 				} else {
-					wsURL = sfClient.CloudBrowser(launchArgs.toConfig())
+					wsURL = appendSolveCaptchaParam(sfClient.CloudBrowser(launchArgs.toConfig()), launchArgs.solveCaptcha)
 				}
 			}
 
