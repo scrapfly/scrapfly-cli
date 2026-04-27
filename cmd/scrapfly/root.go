@@ -33,7 +33,7 @@ type rootFlags struct {
 // root shortcut to tell "scrapfly https://..." from "scrapfly scrape ...".
 var knownSubcommands = map[string]struct{}{
 	"scrape": {}, "scraper": {}, "screenshot": {}, "extract": {},
-	"crawl": {}, "account": {}, "status": {}, "config": {},
+	"crawl": {}, "schedule": {}, "account": {}, "status": {}, "config": {},
 	"browser": {}, "agent": {}, "selector": {}, "mcp": {},
 	"auth":   {},
 	"update": {}, "version": {}, "help": {}, "completion": {}, "__complete": {},
@@ -161,10 +161,17 @@ Examples:
 	root.PersistentFlags().StringVarP(&flags.outputDir, "output-dir", "O", "", "write primary payload into this directory with an auto-generated filename")
 	root.PersistentFlags().BoolVar(&showStatus, "status", false, "print CLI + auth + usage status and exit (runs before subcommand)")
 
-	root.AddCommand(newScrapeCmd(&flags))
-	root.AddCommand(newScreenshotCmd(&flags))
+	scrapeCmd := newScrapeCmd(&flags)
+	screenshotCmd := newScreenshotCmd(&flags)
+	crawlCmd := newCrawlCmd(&flags)
+	root.AddCommand(scrapeCmd)
+	root.AddCommand(screenshotCmd)
 	root.AddCommand(newExtractCmd(&flags))
-	root.AddCommand(newCrawlCmd(&flags))
+	root.AddCommand(crawlCmd)
+	// Schedule support: cross-kind top-level group + per-product nested group
+	// (scrape schedule, screenshot schedule, crawl schedule).
+	root.AddCommand(newScheduleCmd(&flags))
+	attachScheduleSubgroups(&flags, scrapeCmd, screenshotCmd, crawlCmd)
 	root.AddCommand(newAccountCmd(&flags))
 	root.AddCommand(newStatusCmd(&flags))
 	root.AddCommand(newConfigCmd(&flags))
