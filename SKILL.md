@@ -1,3 +1,14 @@
+---
+name: scrapfly-cli
+description: >-
+  Use the Scrapfly CLI (`scrapfly`) to scrape web pages, capture screenshots,
+  extract structured data with AI, crawl entire sites, and drive a cloud
+  browser over CDP from a shell. JSON envelope on stdout for every command.
+  Use when the user asks to "scrape a URL", "screenshot a page", "extract
+  data from HTML", "crawl a site", "drive a browser with Playwright/CDP",
+  "bypass anti-bot", or any task involving the `scrapfly` command.
+---
+
 # Scrapfly: Web Scraping, Rendering, and Browser Automation
 
 Scrapfly gives AI agents and applications access to the web through five

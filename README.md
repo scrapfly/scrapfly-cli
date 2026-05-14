@@ -27,7 +27,7 @@ agent is baked in.
   style loop against a cloud browser. Providers ship out of the box for
   Anthropic, OpenAI, Gemini, and any OpenAI-compatible endpoint (Ollama,
   vLLM). Point any other tool-use loop at the full CLI instead via
-  [`agent-onboarding/SKILL.md`](agent-onboarding/SKILL.md).
+  [`SKILL.md`](SKILL.md).
 - **Full product surface**: Web Scraping, Screenshot, Extraction, Crawler,
   and the CDP-driven Browser, each with complete SDK-parity flags.
 - **Pipe-friendly**: stable envelope (`{success, product, data|error}`),
@@ -178,14 +178,23 @@ OpenAI-compatible endpoint (Ollama, vLLM, …).
 | Account                 | `GET /account`                                   | `scrapfly account` / `scrapfly status` |
 
 Every documented SDK field is exposed as a flag. See
-[`agent-onboarding/SKILL.md`](agent-onboarding/SKILL.md) for the complete
+[`SKILL.md`](SKILL.md) for the complete
 map.
 
 ## For LLM agents
 
-Point your tool-use loop at [`agent-onboarding/SKILL.md`](agent-onboarding/SKILL.md):
-a compact guide covering the six usage paths, auth, envelope contract,
-and every CLI verb grouped by intent.
+This repo ships an agent skill at [`SKILL.md`](SKILL.md): a compact guide
+covering the six usage paths, auth, envelope contract, and every CLI verb
+grouped by intent.
+
+Install it into Claude Code, Cursor, Codex, Copilot, Cline, Windsurf, and
+40+ other agents in one command:
+
+```bash
+npx skills add scrapfly/scrapfly-cli
+```
+
+Or point your own tool-use loop at the raw markdown — no installer needed.
 
 ## GitHub Actions
 

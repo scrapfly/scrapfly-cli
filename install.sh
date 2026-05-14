@@ -137,3 +137,14 @@ case "$PATH" in
   *"$(dirname "$DEST")"*) ;;
   *) info "note: $(dirname "$DEST") is not on your PATH; add it to start using scrapfly." ;;
 esac
+
+cat <<'EOF'
+
+next steps
+  1. scrapfly config set-key scp-live-...
+  2. teach your AI assistant (Claude Code, Cursor, Codex, Copilot, ...)
+     how to drive Scrapfly:
+       npx skills add scrapfly/scrapfly-cli
+
+docs: https://scrapfly.io/docs
+EOF

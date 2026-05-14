@@ -99,6 +99,14 @@ async function extractZip(stream, outDir) {
     }
   }
   console.log(`[scrapfly-cli] installed ${binTarget}`);
+  console.log('');
+  console.log('  next steps');
+  console.log('    1. scrapfly config set-key scp-live-...');
+  console.log('    2. teach your AI assistant (Claude Code, Cursor, Codex, ...)');
+  console.log('       how to drive Scrapfly:');
+  console.log('         npx skills add scrapfly/scrapfly-cli');
+  console.log('');
+  console.log('  docs: https://scrapfly.io/docs');
 })().catch((err) => {
   console.error(`[scrapfly-cli] installation failed: ${err.message}`);
   console.error('  fix: re-run with SCRAPFLY_CLI_VERSION=v0.2.0 or download manually');
