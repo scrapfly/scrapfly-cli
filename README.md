@@ -26,8 +26,9 @@ agent is baked in.
 - **Agentic by design**: `scrapfly agent "<task>"` runs a Playwright-MCP
   style loop against a cloud browser. Providers ship out of the box for
   Anthropic, OpenAI, Gemini, and any OpenAI-compatible endpoint (Ollama,
-  vLLM). Point any other tool-use loop at the full CLI instead via
-  [`SKILL.md`](SKILL.md).
+  vLLM). For any other tool-use loop, install the [`scrapfly-cli` agent
+  skill](https://github.com/scrapfly/skills/tree/main/scrapfly-cli) — see
+  [For LLM agents](#for-llm-agents) below.
 - **Full product surface**: Web Scraping, Screenshot, Extraction, Crawler,
   and the CDP-driven Browser, each with complete SDK-parity flags.
 - **Pipe-friendly**: stable envelope (`{success, product, data|error}`),
@@ -177,24 +178,30 @@ OpenAI-compatible endpoint (Ollama, vLLM, …).
 | Browser Unblock         | `POST /unblock`                                  | `scrapfly browser <url> --unblock`     |
 | Account                 | `GET /account`                                   | `scrapfly account` / `scrapfly status` |
 
-Every documented SDK field is exposed as a flag. See
-[`SKILL.md`](SKILL.md) for the complete
-map.
+Every documented SDK field is exposed as a flag. See the
+[`scrapfly-cli` agent skill](https://github.com/scrapfly/skills/tree/main/scrapfly-cli/SKILL.md)
+for the complete map.
 
 ## For LLM agents
 
-This repo ships an agent skill at [`SKILL.md`](SKILL.md): a compact guide
-covering the six usage paths, auth, envelope contract, and every CLI verb
-grouped by intent.
-
-Install it into Claude Code, Cursor, Codex, Copilot, Cline, Windsurf, and
-40+ other agents in one command:
+The agent skill that teaches Claude Code, Cursor, Codex, Copilot, Cline,
+Windsurf, and [50+ other agents](https://skills.sh) how to drive this CLI
+lives in the central [`scrapfly/skills`](https://github.com/scrapfly/skills)
+repo. Install it via the open [`skills`](https://www.npmjs.com/package/skills)
+CLI:
 
 ```bash
-npx skills add scrapfly/scrapfly-cli
+# Just the CLI skill
+npx skills add scrapfly/skills --skill scrapfly-cli
+
+# Or every Scrapfly skill (SDK + CLI + MCP agent rules)
+npx skills add scrapfly/skills --all
 ```
 
-Or point your own tool-use loop at the raw markdown — no installer needed.
+That ships a compact guide covering the six usage paths, auth, the JSON
+envelope contract, and every CLI verb grouped by intent. Or point your own
+tool-use loop at the raw markdown:
+[`scrapfly/skills/scrapfly-cli/SKILL.md`](https://github.com/scrapfly/skills/blob/main/scrapfly-cli/SKILL.md).
 
 ## GitHub Actions
 

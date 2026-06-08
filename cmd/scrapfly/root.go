@@ -35,7 +35,7 @@ var knownSubcommands = map[string]struct{}{
 	"scrape": {}, "scraper": {}, "screenshot": {}, "extract": {},
 	"crawl": {}, "schedule": {}, "account": {}, "status": {}, "config": {},
 	"browser": {}, "agent": {}, "selector": {}, "mcp": {},
-	"auth":   {},
+	"exit-peer": {}, "auth": {}, "alert": {},
 	"update": {}, "version": {}, "help": {}, "completion": {}, "__complete": {},
 }
 
@@ -178,8 +178,10 @@ Examples:
 	root.AddCommand(newAuthCmd(&flags))
 	root.AddCommand(newBrowserCmd(&flags))
 	root.AddCommand(newAgentCmd(&flags))
+	root.AddCommand(newExitPeerCmd(&flags))
 	root.AddCommand(newSelectorCmd(&flags))
 	root.AddCommand(newMcpCmd(&flags))
+	root.AddCommand(newAlertCmd(&flags))
 	root.AddCommand(newUpdateCmd(&flags))
 	root.AddCommand(newVersionCmd())
 

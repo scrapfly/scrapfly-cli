@@ -8,7 +8,7 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/openai/openai-go v1.12.0
-	github.com/scrapfly/go-scrapfly v0.3.4
+	github.com/scrapfly/go-scrapfly v0.3.5-0.20260608002501-700f24d5dbbe
 	github.com/spf13/cobra v1.10.2
 	google.golang.org/genai v1.54.0
 )

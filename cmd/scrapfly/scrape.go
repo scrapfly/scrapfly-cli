@@ -146,7 +146,6 @@ Flag groups:
 				CacheTTL:           cacheTTL,
 				CacheClear:         cacheClear,
 				Session:            session,
-				SessionStickyProxy: sessionStickyProxy,
 				Format:             scrapfly.Format(format),
 				ExtractionPrompt:   extractionPrompt,
 				ExtractionModel:    scrapfly.ExtractionModel(extractionModel),
@@ -160,6 +159,10 @@ Flag groups:
 				DNS:                dns,
 				CorrelationID:      correlationID,
 				ProxifiedResponse:  proxified,
+			}
+
+			if cmd.Flags().Changed("session-sticky-proxy") {
+				cfg.SessionStickyProxy = &sessionStickyProxy
 			}
 
 			for _, o := range formatOptions {
