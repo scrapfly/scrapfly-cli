@@ -162,6 +162,8 @@ type browserLaunchFlags struct {
 	proxyPool    string
 	osSpoof      string
 	country      string
+	lang         string
+	languages    []string
 	session      string
 	timeout      int
 	blockImages  bool
@@ -183,6 +185,8 @@ func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
 	cmd.Flags().StringVar(&f.proxyPool, "proxy-pool", "", "public_datacenter_pool|public_residential_pool")
 	cmd.Flags().StringVar(&f.osSpoof, "os", "", "OS spoof")
 	cmd.Flags().StringVar(&f.country, "country", "", "proxy country (ISO 3166-1 alpha-2)")
+	cmd.Flags().StringVar(&f.lang, "lang", "", "browser UI language base tag, e.g. en (navigator.language; derived from country when unset)")
+	cmd.Flags().StringSliceVar(&f.languages, "language", nil, "ordered Accept-Language preference, e.g. fr-FR (repeatable, max 3; derived from country when unset)")
 	// NOTE: --session is NOT bound here because the browser command tree
 	// exposes it as a persistent flag (sessionIDFlag) shared across start /
 	// stop / status / action subcommands. Callers outside the browser tree
@@ -208,6 +212,8 @@ func (f *browserLaunchFlags) toConfig() *scrapfly.CloudBrowserConfig {
 		ProxyPool:    f.proxyPool,
 		OS:           f.osSpoof,
 		Country:      f.country,
+		Lang:         f.lang,
+		Languages:    f.languages,
 		Session:      f.session,
 		Timeout:      f.timeout,
 		BlockImages:  f.blockImages,
