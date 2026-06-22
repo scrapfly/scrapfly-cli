@@ -13,7 +13,7 @@ import (
 // Populated at build time via ldflags in .goreleaser*.yaml. Defaults keep
 // `go install ./cmd/scrapfly` / `go build` usable without goreleaser.
 var (
-	version = "0.3.10"
+	version = "0.3.11"
 	commit  = "dev"
 	date    = "unknown"
 )
