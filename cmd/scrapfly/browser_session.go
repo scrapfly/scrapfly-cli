@@ -45,6 +45,16 @@ Runs in the foreground; background it with & / systemd / tmux as you prefer.`,
 				fmt.Fprintf(os.Stderr, "[session %s] warning: could not record active session: %v\n", sessionIDFlag, err)
 			}
 			defer sessiond.ClearCurrent(sessionIDFlag)
+			if wsURL != "" {
+				if err := errSessionShapingFlagsIgnored(&launchCfg, "--ws"); err != nil {
+					return err
+				}
+			}
+			// Only a URL built from launchCfg carries the VNC/RTC params, so
+			// only that branch may advertise a VNC channel afterwards. A --ws
+			// or /unblock URL was minted elsewhere and the launch flags never
+			// reached the server.
+			builtFromFlags := false
 			// Resolve ws URL.
 			if wsURL == "" {
 				client, err := buildClient(flags)
@@ -53,6 +63,9 @@ Runs in the foreground; background it with & / systemd / tmux as you prefer.`,
 				}
 				switch {
 				case targetURL != "" && unblock:
+					if err := errSessionShapingFlagsIgnored(&launchCfg, "--url with --unblock"); err != nil {
+						return err
+					}
 					res, err := client.CloudBrowserUnblock(scrapfly.UnblockConfig{URL: targetURL, Country: launchCfg.country})
 					if err != nil {
 						return err
@@ -64,7 +77,8 @@ Runs in the foreground; background it with & / systemd / tmux as you prefer.`,
 					// Copy sessionIDFlag into the launch config so Scrapfly
 					// pins the browser session identity.
 					launchCfg.session = sessionIDFlag
-					wsURL = appendSolveCaptchaParam(client.CloudBrowser(launchCfg.toConfig()), launchCfg.solveCaptcha)
+					wsURL = client.CloudBrowser(launchCfg.toConfig())
+					builtFromFlags = true
 				}
 			}
 
@@ -77,9 +91,33 @@ Runs in the foreground; background it with & / systemd / tmux as you prefer.`,
 				cancel()
 			}()
 
-			fmt.Fprintf(os.Stderr, "[session %s] connecting %s\n", sessionIDFlag, wsURL)
-			return sessiond.Serve(ctx, sessionIDFlag, wsURL, func(sock string) {
+			// Resolved before the dial so a caller with no api key configured
+			// degrades to no salt rather than failing to start.
+			vncSalt := ""
+			if builtFromFlags && launchCfg.enableVNC && launchCfg.vncPassword != "" {
+				vncSalt = projectSaltFor(flags, wsURL)
+			}
+
+			// The URL carries the api key and, now, the vault key and the VNC /
+			// RTC passwords. Keep them out of terminal scrollback and CI logs —
+			// `browser status` still reports the full URL on request.
+			fmt.Fprintf(os.Stderr, "[session %s] connecting %s\n", sessionIDFlag, redactWSURL(wsURL))
+			return sessiond.Serve(ctx, sessionIDFlag, wsURL, func(sock, runID string) {
 				fmt.Fprintf(os.Stderr, "[session %s] ready; socket=%s\n", sessionIDFlag, sock)
+				// An operator needs both halves and can derive neither: the run
+				// id exists only after allocation, and the password a native
+				// client types on :5901 is salted.
+				switch {
+				case vncSalt != "":
+					vncURL, vncPassword := vncConnectInfo(wsURL, vncSalt, launchCfg.vncPassword, runID)
+					fmt.Fprintf(os.Stderr, "[session %s] vnc %s\n", sessionIDFlag, vncURL)
+					fmt.Fprintf(os.Stderr, "[session %s] vnc password %s\n", sessionIDFlag, vncPassword)
+				case builtFromFlags && launchCfg.enableVNC && len(launchCfg.hitlNetworks) > 0:
+					// IP-bypass mode: the server minted its own secret, so the
+					// run id is the only thing the operator still needs.
+					vncURL, _ := vncConnectInfo(wsURL, "", "", runID)
+					fmt.Fprintf(os.Stderr, "[session %s] vnc %s (authenticated by source IP)\n", sessionIDFlag, vncURL)
+				}
 			})
 		},
 	}

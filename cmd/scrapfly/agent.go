@@ -194,15 +194,23 @@ traces go to stderr when --verbose is set.`,
 			}
 
 			// Resolve initial CDP endpoint.
+			if wsURL != "" {
+				if err := errSessionShapingFlagsIgnored(&launchArgs, "--ws"); err != nil {
+					return err
+				}
+			}
 			if wsURL == "" {
 				if targetURL != "" {
+					if err := errSessionShapingFlagsIgnored(&launchArgs, "--url"); err != nil {
+						return err
+					}
 					res, err := sfClient.CloudBrowserUnblock(scrapfly.UnblockConfig{URL: targetURL})
 					if err != nil {
 						return err
 					}
 					wsURL = appendSolveCaptchaParam(res.WSURL, launchArgs.solveCaptcha)
 				} else {
-					wsURL = appendSolveCaptchaParam(sfClient.CloudBrowser(launchArgs.toConfig()), launchArgs.solveCaptcha)
+					wsURL = sfClient.CloudBrowser(launchArgs.toConfig())
 				}
 			}
 

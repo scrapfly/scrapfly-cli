@@ -13,12 +13,14 @@ import (
 )
 
 // appendSolveCaptchaParam adds ?solve_captcha=true to a CDP WSS URL when the
-// caller opted in via --solve-captcha. This is a temporary shim: the Go SDK
-// version pinned in go.mod (v0.3.3) does not yet expose a SolveCaptcha field
-// on CloudBrowserConfig, but the Scrapfly API already honors the query param
-// and arms Antibot.captchaEnable on session start. Once the SDK ships the
-// field, delete this helper and set cfg.SolveCaptcha = f.solveCaptcha in
-// toConfig() instead.
+// caller opted in via --solve-captcha.
+//
+// Only the /unblock path needs this: CloudBrowserConfig carries SolveCaptcha
+// (set in toConfig), but UnblockConfig has no such field, so the flag can only
+// reach an unblock-minted session by riding the returned WSS URL. The API
+// honors the query param and arms Antibot.captchaEnable on connect, so the
+// solver still fires on the first page attach. Drop this once the SDK's
+// UnblockConfig grows the field.
 func appendSolveCaptchaParam(wsURL string, solveCaptcha bool) string {
 	if !solveCaptcha {
 		return wsURL
@@ -62,6 +64,7 @@ Subcommands:
   playback    Fetch debug playback metadata
   video       Download session recording (webm; requires -o/-O)
   extensions  Manage browser extensions (list|get|upload|delete)
+  salt        Print the project salt prefixed to your VNC password
 
 The WSS URL includes your API key as a query param — treat as a secret.`,
 		Example: `  # Mint a CDP URL (no target pre-navigated)
@@ -80,19 +83,44 @@ The WSS URL includes your API key as a query param — treat as a secret.`,
 			}
 			// No URL → print a CDP WSS URL (ws-mode).
 			if len(args) == 0 {
-				wsURL := appendSolveCaptchaParam(client.CloudBrowser(launchCfg.toConfig()), launchCfg.solveCaptcha)
-				if flags.pretty {
-					fmt.Fprintln(os.Stdout, wsURL)
-					return nil
+				// --session is persistent on the command tree, not bound by
+				// bindBrowserLaunchFlags, so every call site has to copy it in
+				// itself (start, execute and agent already do). Without this
+				// the session= pin never reaches the URL and Scrapfly
+				// allocates a fresh browser instead of resuming.
+				if sessionIDFlag != "" {
+					launchCfg.session = sessionIDFlag
 				}
-				return out.WriteSuccess(os.Stdout, false, "browser.ws", map[string]string{
+				wsURL := client.CloudBrowser(launchCfg.toConfig())
+				data := map[string]string{
 					"ws_url":  wsURL,
 					"session": launchCfg.session,
-				})
+				}
+				// The salted password is what an operator types; surface it
+				// here so nobody has to derive it from the api key by hand.
+				if launchCfg.enableVNC && launchCfg.vncPassword != "" {
+					salt := client.CloudBrowserProjectSalt()
+					vncURL, vncPassword := vncConnectInfo(wsURL, salt, launchCfg.vncPassword, "")
+					data["project_salt"] = salt
+					data["vnc_url"] = vncURL
+					data["vnc_password"] = vncPassword
+				}
+				if flags.pretty {
+					fmt.Fprintln(os.Stdout, wsURL)
+					// stdout stays a bare pipeable URL in pretty mode.
+					if vncURL, ok := data["vnc_url"]; ok {
+						fmt.Fprintf(os.Stderr, "vnc %s\nvnc password %s\n", vncURL, data["vnc_password"])
+					}
+					return nil
+				}
+				return out.WriteSuccess(os.Stdout, false, "browser.ws", data)
 			}
 			// URL + no --unblock — guard the user.
 			if !unblock {
 				return fmt.Errorf("positional URL requires --unblock (Scrapfly /unblock endpoint). Omit the URL to just mint a CDP URL")
+			}
+			if err := errSessionShapingFlagsIgnored(&launchCfg, "--unblock"); err != nil {
+				return err
 			}
 			res, err := client.CloudBrowserUnblock(scrapfly.UnblockConfig{
 				URL:            args[0],
@@ -138,6 +166,7 @@ The WSS URL includes your API key as a query param — treat as a secret.`,
 	cmd.AddCommand(newBrowserPlaybackCmd(flags))
 	cmd.AddCommand(newBrowserVideoCmd(flags))
 	cmd.AddCommand(newBrowserExtensionsCmd(flags))
+	cmd.AddCommand(newBrowserSaltCmd(flags))
 
 	// Session daemon + action subcommands.
 	cmd.AddCommand(newBrowserStartCmd(flags))
@@ -179,6 +208,14 @@ type browserLaunchFlags struct {
 	extensions   []string
 	browserBrand string
 	byopProxy    string
+	vault        string
+	vaultKey     string
+	enableVNC    bool
+	vncPassword  string
+	enableRTC    bool
+	rtcUsername  string
+	rtcPassword  string
+	hitlNetworks []string
 }
 
 func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
@@ -205,6 +242,18 @@ func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
 	cmd.Flags().StringSliceVar(&f.extensions, "extension", nil, "extension id to attach (repeatable)")
 	cmd.Flags().StringVar(&f.browserBrand, "browser-brand", "", "chrome|edge|brave|opera")
 	cmd.Flags().StringVar(&f.byopProxy, "byop-proxy", "", "bring-your-own proxy URL (Custom plan)")
+	cmd.Flags().StringVar(&f.vault, "vault", "", "credential vault NAME; items are decrypted and pushed over CDP before the session yields")
+	cmd.Flags().StringVar(&f.vaultKey, "vault-key", "", "base64 vault key you saved at vault creation. Scrapfly never stores it — without it the session fails with ERR::BROWSER::VAULT_KEY_INVALID")
+	// VNC/RTC credentials are customer-owned: the server has no default and
+	// rejects the session unless a password is supplied. The password sent here
+	// is always the RAW one; which form a VIEWER types depends on the endpoint
+	// (see newBrowserSaltCmd).
+	cmd.Flags().BoolVar(&f.enableVNC, "enable-vnc", false, "expose the session over VNC for human takeover (requires --vnc-password)")
+	cmd.Flags().StringVar(&f.vncPassword, "vnc-password", "", "VNC password (raw; the salted form a native client types is printed on connect)")
+	cmd.Flags().BoolVar(&f.enableRTC, "enable-rtc", false, "expose the session over WebRTC live video (requires --rtc-password)")
+	cmd.Flags().StringVar(&f.rtcUsername, "rtc-username", "", "WebRTC signaling username (server default: scrapfly)")
+	cmd.Flags().StringVar(&f.rtcPassword, "rtc-password", "", "WebRTC signaling password")
+	cmd.Flags().StringSliceVar(&f.hitlNetworks, "hitl-allowed-network", nil, "IP or CIDR trusted to attach to VNC/WebRTC without credentials (repeatable). Replaces the password requirement rather than adding to it")
 }
 
 func (f *browserLaunchFlags) toConfig() *scrapfly.CloudBrowserConfig {
@@ -228,6 +277,148 @@ func (f *browserLaunchFlags) toConfig() *scrapfly.CloudBrowserConfig {
 		Extensions:   f.extensions,
 		BrowserBrand: f.browserBrand,
 		BYOPProxy:    f.byopProxy,
+		SolveCaptcha: f.solveCaptcha,
+		Vault:        f.vault,
+		VaultKey:     f.vaultKey,
+		EnableVNC:    f.enableVNC,
+		VNCPassword:  f.vncPassword,
+		EnableRTC:    f.enableRTC,
+		RTCUsername:  f.rtcUsername,
+		RTCPassword:  f.rtcPassword,
+
+		HITLAllowedNetworks: f.hitlNetworks,
+	}
+}
+
+// vncConnectInfo renders what a native VNC client needs to attach on the TCP
+// endpoint (port 5901). Scrapfly prefixes the project salt server-side at
+// allocation, so that endpoint requires "<salt>-<raw>". The WebSocket endpoint
+// /run/<run_id>/vnc authenticates against the raw --vnc-password instead.
+//
+// The run id is only known once a session exists, so callers that have not
+// connected yet pass "" and get a {run_id} placeholder.
+//
+// Duplicates go-scrapfly's CloudBrowserVNCPassword because go.mod pins a
+// published SDK version that predates it. Drop this once the SDK ships.
+// Callers must gate on enableVNC && vncPassword != "" (the server's own
+// salting condition) so this never renders a credential for a session that
+// has none.
+func vncConnectInfo(wsURL, salt, rawPassword, runID string) (connectURL, password string) {
+	// Hostname(), not Host: the CDP URL may carry a port (dev, self-hosted) and
+	// appending :5901 to "host:8443" would produce a double-port authority.
+	host := "browser.scrapfly.io"
+	if u, err := url.Parse(wsURL); err == nil && u.Hostname() != "" {
+		host = u.Hostname()
+	}
+	if runID == "" {
+		runID = "{run_id}"
+	}
+	return fmt.Sprintf("vnc://%s@%s:5901", runID, host), salt + "-" + rawPassword
+}
+
+// wsURLSecretParams are the CDP URL query params that carry a credential.
+// api_key was always there; the vault key and the HITL passwords joined it when
+// those flags landed.
+var wsURLSecretParams = []string{"api_key", "key", "vault_key", "vnc_password", "rtc_password"}
+
+// redactWSURL masks credential params for human-facing output, so they do not
+// land in terminal scrollback or CI logs.
+func redactWSURL(wsURL string) string {
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		return "<unparseable ws url>"
+	}
+	q := u.Query()
+	for _, p := range wsURLSecretParams {
+		if q.Get(p) != "" {
+			q.Set(p, "REDACTED")
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// errSessionShapingFlagsIgnored rejects launch flags that shape the session at
+// ALLOCATION time when the session is not being allocated from those flags.
+//
+// /unblock takes its own config object (no VNC/RTC/vault fields in the SDK's
+// UnblockConfig) and --ws attaches to a URL minted elsewhere, so in both cases
+// the server has already allocated the browser by the time these flags exist.
+// They cannot be applied retroactively: x11vnc is started at allocation, so
+// re-sending enable_vnc on the CDP connect changes nothing. Failing here beats
+// dropping them silently and leaving the caller waiting on a VNC endpoint that
+// was never opened.
+func errSessionShapingFlagsIgnored(f *browserLaunchFlags, how string) error {
+	var ignored []string
+	if f.enableVNC {
+		ignored = append(ignored, "--enable-vnc")
+	}
+	if f.enableRTC {
+		ignored = append(ignored, "--enable-rtc")
+	}
+	if f.vault != "" {
+		ignored = append(ignored, "--vault")
+	}
+	if len(ignored) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s cannot carry %s: the session is already allocated by then. Omit %s, or drop %s so the session is minted from the flags",
+		how, strings.Join(ignored, " / "), how, strings.Join(ignored, " / "))
+}
+
+// projectSaltFor resolves the salt without a round-trip — it is sha256 of the
+// api key.
+//
+// The key embedded in wsURL wins: that is the one the session was actually
+// minted with, and on the --ws path it can differ from the locally configured
+// key, which would silently yield a password no VNC client can use. Falls back
+// to the configured key (and returns "" if there is none) for callers that
+// have no URL yet.
+func projectSaltFor(flags *rootFlags, wsURL string) string {
+	if u, err := url.Parse(wsURL); err == nil {
+		if key := u.Query().Get("api_key"); key != "" {
+			return scrapfly.ProjectSalt(key)
+		}
+	}
+	client, err := buildClient(flags)
+	if err != nil {
+		return ""
+	}
+	return client.CloudBrowserProjectSalt()
+}
+
+func newBrowserSaltCmd(flags *rootFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "salt",
+		Short: "Print the project salt prefixed to your VNC password",
+		Long: `The project salt is sha256(api_key)[:8] — deterministic and computed locally,
+identical to the X-Browser-Project-Salt response header.
+
+Scrapfly prefixes it to your vnc_password when the session is allocated. Which
+form a viewer types depends on the endpoint it attaches to:
+
+  native client on the TCP mux (vnc://<run_id>@host:5901)  "<salt>-<password>"
+  WebSocket endpoint (wss://host/run/<run_id>/vnc)         the raw password
+
+The mux keys its DES challenge on the salted form so two customers who pick the
+same password never collide on the wire; the WebSocket handler strips the salt
+server-side before the same check. "browser start" prints the TCP URL and the
+salted password that goes with it.`,
+		Example: `  scrapfly browser salt --pretty`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := buildClient(flags)
+			if err != nil {
+				return err
+			}
+			salt := client.CloudBrowserProjectSalt()
+			if flags.pretty {
+				fmt.Fprintln(os.Stdout, salt)
+				return nil
+			}
+			return out.WriteSuccess(os.Stdout, false, "browser.salt", map[string]string{
+				"project_salt": salt,
+			})
+		},
 	}
 }
 

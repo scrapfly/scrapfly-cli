@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	scrapfly "github.com/scrapfly/go-scrapfly"
 )
@@ -17,11 +18,34 @@ type Envelope struct {
 }
 
 type EnvelopeError struct {
-	Code       string `json:"code,omitempty"`
-	Message    string `json:"message"`
-	HTTPStatus int    `json:"http_status,omitempty"`
-	Hint       string `json:"hint,omitempty"`
-	Retryable  bool   `json:"retryable,omitempty"`
+	Code              string   `json:"code,omitempty"`
+	Message           string   `json:"message"`
+	HTTPStatus        int      `json:"http_status,omitempty"`
+	Hint              string   `json:"hint,omitempty"`
+	Retryable         bool     `json:"retryable,omitempty"`
+	AvailableProducts []string `json:"available_products,omitempty"`
+}
+
+// APIError is a structured error from a Scrapfly HTTP endpoint not covered
+// by the go-scrapfly SDK error type (e.g. the public docs search). Carrying
+// the fields here keeps them machine-readable in the JSON error envelope so
+// agents can self-correct instead of parsing prose.
+type APIError struct {
+	Code              string
+	Message           string
+	HTTPStatus        int
+	AvailableProducts []string
+}
+
+func (e *APIError) Error() string {
+	msg := e.Message
+	if len(e.AvailableProducts) > 0 {
+		msg += " — available: " + strings.Join(e.AvailableProducts, ", ")
+	}
+	if e.HTTPStatus != 0 {
+		return fmt.Sprintf("%s (http %d)", msg, e.HTTPStatus)
+	}
+	return msg
 }
 
 // WriteSuccess writes a success envelope. When pretty is true, the caller is
@@ -51,6 +75,15 @@ func toEnvelopeError(err error) *EnvelopeError {
 		return nil
 	}
 	e := &EnvelopeError{Message: err.Error()}
+
+	var structured *APIError
+	if errors.As(err, &structured) {
+		e.Code = structured.Code
+		e.Message = structured.Message
+		e.HTTPStatus = structured.HTTPStatus
+		e.AvailableProducts = structured.AvailableProducts
+		return e
+	}
 
 	var apiErr *scrapfly.APIError
 	if errors.As(err, &apiErr) {

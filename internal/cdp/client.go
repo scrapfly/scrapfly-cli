@@ -50,6 +50,10 @@ func (e *RPCError) Error() string {
 type Client struct {
 	conn *websocket.Conn
 
+	// runID is read once from the upgrade response before readLoop starts
+	// and never mutated, so it needs no lock.
+	runID string
+
 	nextID atomic.Int64
 
 	mu       sync.Mutex
@@ -64,7 +68,7 @@ type Client struct {
 // Dial connects to a CDP WebSocket URL (typically wss://browser.scrapfly.io/
 // ?api_key=...). Pass a derived ctx for dial cancellation.
 func Dial(ctx context.Context, wsURL string) (*Client, error) {
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	conn, resp, err := websocket.Dial(ctx, wsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cdp dial: %w", err)
 	}
@@ -75,9 +79,19 @@ func Dial(ctx context.Context, wsURL string) (*Client, error) {
 		pending: map[int]chan *Message{},
 		doneCh:  make(chan struct{}),
 	}
+	// Scrapfly stamps the run id on the 101 response, which is the only source
+	// for a session minted straight from a CDP URL (the /unblock REST path
+	// returns it in the body instead). It doubles as the VNC mux username.
+	if resp != nil {
+		c.runID = resp.Header.Get("X-Browser-Run-Id")
+	}
 	go c.readLoop()
 	return c, nil
 }
+
+// RunID returns the Scrapfly run id advertised on the upgrade response, or ""
+// when the peer is not a Scrapfly endpoint.
+func (c *Client) RunID() string { return c.runID }
 
 // Close closes the underlying WebSocket. Any pending Call returns the close
 // error.
@@ -130,7 +144,17 @@ func (c *Client) Call(ctx context.Context, method string, params any, sessionID 
 			return nil, c.err
 		}
 		return nil, fmt.Errorf("cdp connection closed")
-	case resp := <-ch:
+	case resp, ok := <-ch:
+		// readLoop closes every pending channel when the socket dies, so a
+		// closed channel here means "connection lost mid-call", not a reply.
+		// Reading it as a *Message yields nil and dereferencing that crashed
+		// the CLI instead of reporting the disconnect.
+		if !ok {
+			if c.err != nil {
+				return nil, fmt.Errorf("cdp connection closed: %w", c.err)
+			}
+			return nil, fmt.Errorf("cdp connection closed")
+		}
 		if resp.Error != nil {
 			return nil, resp.Error
 		}

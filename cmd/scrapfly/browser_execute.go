@@ -93,9 +93,15 @@ envelope.`,
 			switch {
 			case wsURL != "":
 				// caller-supplied URL — no pre-navigation, no SDK needed.
+				if err := errSessionShapingFlagsIgnored(&launchArgs, "--ws"); err != nil {
+					return err
+				}
 			case targetURL != "" || unblock:
 				if targetURL == "" {
 					return fmt.Errorf("--unblock requires --url")
+				}
+				if err := errSessionShapingFlagsIgnored(&launchArgs, "--url with --unblock"); err != nil {
+					return err
 				}
 				client, err := buildClient(flags)
 				if err != nil {
@@ -113,7 +119,7 @@ envelope.`,
 				if err != nil {
 					return err
 				}
-				wsURL = appendSolveCaptchaParam(client.CloudBrowser(launchArgs.toConfig()), launchArgs.solveCaptcha)
+				wsURL = client.CloudBrowser(launchArgs.toConfig())
 			}
 
 			cdpClient, err := cdp.Dial(ctx, wsURL)
@@ -121,6 +127,11 @@ envelope.`,
 				return err
 			}
 			defer cdpClient.Close()
+			// The CDP and --ws branches never call /unblock, so the upgrade
+			// response is their only source for the run id.
+			if runID == "" {
+				runID = cdpClient.RunID()
+			}
 
 			sess, err := cdp.Attach(ctx, cdpClient)
 			if err != nil {

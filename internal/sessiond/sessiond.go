@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -93,13 +94,44 @@ func PathsFor(sessionID string) (sock, meta string, err error) {
 	return filepath.Join(dir, sessionID+".sock"), filepath.Join(dir, sessionID+".json"), nil
 }
 
+// stripVaultKey drops vault_key from a URL before it is written to disk.
+//
+// The vault key is end-to-end encrypted: it is the one credential on the CDP
+// URL whose whole point is that it never leaves the client, so it must not sit
+// in <session>.json, which outlives a SIGKILL (the cleanup below only runs on
+// graceful exit). Dropping rather than masking keeps the stored URL
+// re-attachable — the vault push already happened on the first connect, and a
+// later attach neither needs nor should repeat it.
+func stripVaultKey(wsURL string) string {
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		return wsURL
+	}
+	q := u.Query()
+	if q.Get("vault_key") == "" {
+		return wsURL
+	}
+	q.Del("vault_key")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// dialBudget bounds the CDP dial. The upgrade response only lands once
+// Scrapfly has allocated a browser, and a cold pool (no warm agent for the
+// requested os/proxy tuple) routinely spends more than a minute there — the
+// previous 30s budget failed those starts with a bare "context deadline
+// exceeded" that reads like a network fault.
+const dialBudget = 150 * time.Second
+
 // Serve runs the daemon until ctx is cancelled or a SIGINT/SIGTERM is
 // received. It attaches to wsURL, writes <sessionID>.json + .sock under
 // ~/.scrapfly/sessions/, serves requests, and cleans up on exit.
 //
 // The daemon is foreground: the caller is responsible for backgrounding
-// (`&`, systemd, tmux). `onReady` is invoked once the socket is listening.
-func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock string)) error {
+// (`&`, systemd, tmux). `onReady` is invoked once the socket is listening,
+// with the Scrapfly run id from the upgrade response (empty when the peer
+// did not advertise one).
+func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock, runID string)) error {
 	sockPath, metaPath, err := PathsFor(sessionID)
 	if err != nil {
 		return err
@@ -112,7 +144,7 @@ func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock strin
 		_ = os.Remove(sockPath)
 	}
 
-	dialCtx, cancelDial := context.WithTimeout(ctx, 30*time.Second)
+	dialCtx, cancelDial := context.WithTimeout(ctx, dialBudget)
 	defer cancelDial()
 	client, err := cdp.Dial(dialCtx, wsURL)
 	if err != nil {
@@ -126,7 +158,7 @@ func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock strin
 
 	meta := Meta{
 		SessionID: sessionID,
-		WSURL:     wsURL,
+		WSURL:     stripVaultKey(wsURL),
 		PID:       os.Getpid(),
 		StartedAt: time.Now().UTC(),
 	}
@@ -152,7 +184,7 @@ func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock strin
 	defer sess.Detach(context.Background())
 
 	if onReady != nil {
-		onReady(sockPath)
+		onReady(sockPath, client.RunID())
 	}
 
 	// Single shutdown channel — closed on first of: parent ctx cancelled,
