@@ -116,13 +116,6 @@ func stripVaultKey(wsURL string) string {
 	return u.String()
 }
 
-// dialBudget bounds the CDP dial. The upgrade response only lands once
-// Scrapfly has allocated a browser, and a cold pool (no warm agent for the
-// requested os/proxy tuple) routinely spends more than a minute there — the
-// previous 30s budget failed those starts with a bare "context deadline
-// exceeded" that reads like a network fault.
-const dialBudget = 150 * time.Second
-
 // Serve runs the daemon until ctx is cancelled or a SIGINT/SIGTERM is
 // received. It attaches to wsURL, writes <sessionID>.json + .sock under
 // ~/.scrapfly/sessions/, serves requests, and cleans up on exit.
@@ -131,7 +124,14 @@ const dialBudget = 150 * time.Second
 // (`&`, systemd, tmux). `onReady` is invoked once the socket is listening,
 // with the Scrapfly run id from the upgrade response (empty when the peer
 // did not advertise one).
-func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock, runID string)) error {
+//
+// dialBudget bounds the CDP dial. The upgrade response only lands once
+// Scrapfly has allocated a browser, and a cold pool (no warm agent for the
+// requested os/proxy tuple) routinely spends more than a minute there, so the
+// budget is the caller's --timeout rather than a private constant: an operator
+// hitting a cold pool can raise it. Zero or negative bounds the dial by ctx
+// alone.
+func Serve(ctx context.Context, sessionID, wsURL string, dialBudget time.Duration, onReady func(sock, runID string)) error {
 	sockPath, metaPath, err := PathsFor(sessionID)
 	if err != nil {
 		return err
@@ -144,17 +144,40 @@ func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock, runI
 		_ = os.Remove(sockPath)
 	}
 
-	dialCtx, cancelDial := context.WithTimeout(ctx, dialBudget)
-	defer cancelDial()
+	// Bind before dialing. bind(2) fails when the path already exists, so the
+	// socket file is the session id's mutex, and holding it for the whole dial
+	// (minutes on a cold pool) is what stops a second `browser start` for the
+	// same id from dialing its own browser and then overwriting the live
+	// daemon's metadata; the loser returns here. Clients that connect during
+	// the dial wait in the listen backlog until the accept loop below starts,
+	// so they queue instead of reaching a half-built session.
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		return fmt.Errorf("reserve session %q (another `browser start` may already hold %s): %w", sessionID, sockPath, err)
+	}
+	_ = os.Chmod(sockPath, 0o600)
+	// Defers run LIFO at return. Required teardown order: Detach (needs live
+	// CDP) → client.Close (tears down WS) → ln.Close → rm sock, so each
+	// resource registers its defer where it is acquired.
+	defer os.Remove(sockPath)
+	defer ln.Close()
+
+	dialCtx := ctx
+	if dialBudget > 0 {
+		var cancelDial context.CancelFunc
+		dialCtx, cancelDial = context.WithTimeout(ctx, dialBudget)
+		defer cancelDial()
+	}
 	client, err := cdp.Dial(dialCtx, wsURL)
 	if err != nil {
 		return fmt.Errorf("cdp dial: %w", err)
 	}
+	defer client.Close()
 	sess, err := cdp.Attach(dialCtx, client)
 	if err != nil {
-		_ = client.Close()
 		return fmt.Errorf("cdp attach: %w", err)
 	}
+	defer sess.Detach(context.Background())
 
 	meta := Meta{
 		SessionID: sessionID,
@@ -164,24 +187,9 @@ func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock, runI
 	}
 	mb, _ := json.MarshalIndent(meta, "", "  ")
 	if err := os.WriteFile(metaPath, mb, 0o600); err != nil {
-		_ = client.Close()
 		return fmt.Errorf("write metadata: %w", err)
 	}
 	defer os.Remove(metaPath)
-
-	ln, err := net.Listen("unix", sockPath)
-	if err != nil {
-		_ = client.Close()
-		return fmt.Errorf("listen %s: %w", sockPath, err)
-	}
-	_ = os.Chmod(sockPath, 0o600)
-	// Defers run LIFO at return. Required order: Detach (needs live CDP) →
-	// client.Close (tears down WS) → ln.Close → rm sock. Register them in
-	// the reverse of that.
-	defer os.Remove(sockPath)
-	defer ln.Close()
-	defer client.Close()
-	defer sess.Detach(context.Background())
 
 	if onReady != nil {
 		onReady(sockPath, client.RunID())

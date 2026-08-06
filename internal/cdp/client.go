@@ -13,6 +13,7 @@ package cdp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,20 @@ import (
 
 	"github.com/coder/websocket"
 )
+
+// errConnClosed is the one error a dead connection reports. readLoop closes
+// the pending channels and doneCh for the same failure, so several select arms
+// in Call can be ready at once and Go picks between them at random; routing
+// every arm through connClosed keeps the reported error independent of that
+// pick, and errors.Is(err, errConnClosed) stays true whatever the cause.
+var errConnClosed = errors.New("cdp connection closed")
+
+func connClosed(cause error) error {
+	if cause == nil {
+		return errConnClosed
+	}
+	return fmt.Errorf("%w: %w", errConnClosed, cause)
+}
 
 // Message is the on-wire envelope for both calls and events.
 // Responses carry ID + Result (or Error). Events carry Method + Params (no ID).
@@ -62,7 +77,18 @@ type Client struct {
 	events   []*Message // capped ring
 
 	doneCh chan struct{}
-	err    error
+	// err holds readLoop's terminal failure. It is published under mu in the
+	// same critical section that tears the pending map down, so a caller that
+	// observes a closed channel always observes the cause behind it.
+	err error
+}
+
+// closeErr is the disconnect error for a caller that has just seen doneCh or a
+// closed pending channel.
+func (c *Client) closeErr() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return connClosed(c.err)
 }
 
 // Dial connects to a CDP WebSocket URL (typically wss://browser.scrapfly.io/
@@ -108,8 +134,9 @@ func (c *Client) Call(ctx context.Context, method string, params any, sessionID 
 
 	c.mu.Lock()
 	if c.pending == nil {
+		err := connClosed(c.err)
 		c.mu.Unlock()
-		return nil, fmt.Errorf("cdp: client closed")
+		return nil, err
 	}
 	c.pending[id] = ch
 	c.mu.Unlock()
@@ -140,20 +167,13 @@ func (c *Client) Call(ctx context.Context, method string, params any, sessionID 
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-c.doneCh:
-		if c.err != nil {
-			return nil, c.err
-		}
-		return nil, fmt.Errorf("cdp connection closed")
+		return nil, c.closeErr()
 	case resp, ok := <-ch:
 		// readLoop closes every pending channel when the socket dies, so a
-		// closed channel here means "connection lost mid-call", not a reply.
-		// Reading it as a *Message yields nil and dereferencing that crashed
-		// the CLI instead of reporting the disconnect.
+		// closed channel here means "connection lost mid-call", not a reply:
+		// reading it as a *Message yields nil, and dereferencing that panics.
 		if !ok {
-			if c.err != nil {
-				return nil, fmt.Errorf("cdp connection closed: %w", c.err)
-			}
-			return nil, fmt.Errorf("cdp connection closed")
+			return nil, c.closeErr()
 		}
 		if resp.Error != nil {
 			return nil, resp.Error
@@ -196,9 +216,11 @@ func (c *Client) readLoop() {
 	for {
 		_, data, err := c.conn.Read(ctx)
 		if err != nil {
-			c.err = err
-			// Signal all pending callers.
+			// Publish the cause and signal all pending callers in one
+			// critical section: a caller waking on a closed channel must not
+			// be able to read err before it is set.
 			c.mu.Lock()
+			c.err = err
 			for _, ch := range c.pending {
 				close(ch)
 			}

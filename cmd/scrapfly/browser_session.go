@@ -102,7 +102,7 @@ Runs in the foreground; background it with & / systemd / tmux as you prefer.`,
 			// RTC passwords. Keep them out of terminal scrollback and CI logs —
 			// `browser status` still reports the full URL on request.
 			fmt.Fprintf(os.Stderr, "[session %s] connecting %s\n", sessionIDFlag, redactWSURL(wsURL))
-			return sessiond.Serve(ctx, sessionIDFlag, wsURL, func(sock, runID string) {
+			return sessiond.Serve(ctx, sessionIDFlag, wsURL, flags.timeout, func(sock, runID string) {
 				fmt.Fprintf(os.Stderr, "[session %s] ready; socket=%s\n", sessionIDFlag, sock)
 				// An operator needs both halves and can derive neither: the run
 				// id exists only after allocation, and the password a native
