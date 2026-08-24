@@ -68,9 +68,6 @@ go install github.com/scrapfly/scrapfly-cli/cmd/scrapfly@latest
 Or from a package manager:
 
 ```bash
-# Homebrew (macOS, once the tap is published)
-brew install scrapfly/tap/scrapfly
-
 # npm / pnpm / yarn
 npm install -D scrapfly-cli
 npx scrapfly version
