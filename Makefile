@@ -74,7 +74,9 @@ generate-docs:
 
 release:
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=x.y.z [NEXT_VERSION=x.y.(z+1)]"; exit 2; fi
-	git branch | grep \* | cut -d ' ' -f2 | grep main || exit 1
+	@# Branch guard via rev-parse: the old pipe through grep for the
+	@# current-branch marker errors under ugrep (empty subexpression).
+	@[ "$$(git rev-parse --abbrev-ref HEAD)" = main ] || exit 1
 	git pull origin main
 	$(MAKE) test
 	$(MAKE) generate-docs
