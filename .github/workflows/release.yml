@@ -19,7 +19,7 @@ on:
 
 permissions:
   contents: write
-  id-token: write   # OIDC provenance for npm publish
+  id-token: write   # OIDC: npm trusted publishing + provenance
 
 jobs:
   # ── Resolve the target tag once so every downstream job agrees on it.
@@ -202,18 +202,23 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+
+      # npm OIDC trusted publishing needs npm >= 11.5.1.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Pin npm wrapper version to tag
         working-directory: packages/npm
         run: npm version --no-git-tag-version "${{ needs.resolve-tag.outputs.version }}"
 
+      # No NODE_AUTH_TOKEN: authentication is OIDC trusted publishing,
+      # configured on npmjs.com for this repo + workflow. Provenance is
+      # attached automatically by npm.
       - name: Publish npm wrapper
         working-directory: packages/npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
-        run: npm publish --access public --provenance
+        run: npm publish --access public
 
       - name: Force-move `latest` git tag
         # Only for tag pushes — skip on re-releases of older tags via

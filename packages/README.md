@@ -15,13 +15,15 @@ argv. No Go toolchain required on the user's machine.
 
 ## Publishing
 
-`.github/workflows/publish.yml` publishes on each `v*` tag push (and via
+`.github/workflows/release.yml` publishes on each `v*` tag push (and via
 workflow_dispatch for a re-publish). The tag version is injected into
 `package.json` before publish, so the package version always matches the
 Go binary.
 
-Auth: `NPM_AUTOMATION_TOKEN` secret. Published with `--provenance` so the
-npm registry records an OIDC-signed statement of the build's source.
+Auth: npm OIDC trusted publishing — no token, no secret. npm verifies the
+repo and workflow filename registered as this package's Trusted Publisher
+and mints a short-lived credential per run, so nothing expires. Provenance
+is attached automatically; the `--provenance` flag is not needed.
 
 See the top-level README for the first-time setup steps (org creation,
-token generation, Trusted Publisher as an alternative).
+Trusted Publisher registration).
