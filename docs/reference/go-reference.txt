@@ -56,6 +56,10 @@ func (c *Client) Close() error
     Close closes the underlying WebSocket. Any pending Call returns the close
     error.
 
+func (c *Client) RunID() string
+    RunID returns the Scrapfly run id advertised on the upgrade response,
+    or "" when the peer is not a Scrapfly endpoint.
+
 func (c *Client) WaitEvent(ctx context.Context, method string, match func(json.RawMessage) bool) (json.RawMessage, error)
     WaitEvent blocks until an event with the given method (and optional
     predicate match) is observed. Buffered events are drained first.
@@ -379,6 +383,19 @@ func WriteSuccess(w io.Writer, pretty bool, product string, data any) error
 
 TYPES
 
+type APIError struct {
+	Code              string
+	Message           string
+	HTTPStatus        int
+	AvailableProducts []string
+}
+    APIError is a structured error from a Scrapfly HTTP endpoint not covered by
+    the go-scrapfly SDK error type (e.g. the public docs search). Carrying the
+    fields here keeps them machine-readable in the JSON error envelope so agents
+    can self-correct instead of parsing prose.
+
+func (e *APIError) Error() string
+
 type Envelope struct {
 	Success bool           `json:"success"`
 	Product string         `json:"product,omitempty"`
@@ -387,11 +404,12 @@ type Envelope struct {
 }
 
 type EnvelopeError struct {
-	Code       string `json:"code,omitempty"`
-	Message    string `json:"message"`
-	HTTPStatus int    `json:"http_status,omitempty"`
-	Hint       string `json:"hint,omitempty"`
-	Retryable  bool   `json:"retryable,omitempty"`
+	Code              string   `json:"code,omitempty"`
+	Message           string   `json:"message"`
+	HTTPStatus        int      `json:"http_status,omitempty"`
+	Hint              string   `json:"hint,omitempty"`
+	Retryable         bool     `json:"retryable,omitempty"`
+	AvailableProducts []string `json:"available_products,omitempty"`
 }
 
 
@@ -430,13 +448,22 @@ func Resolve(explicit string) (string, bool)
 
     Returns ("", false) when nothing is available.
 
-func Serve(ctx context.Context, sessionID, wsURL string, onReady func(sock string)) error
+func Serve(ctx context.Context, sessionID, wsURL string, dialBudget time.Duration, onReady func(sock, runID string)) error
     Serve runs the daemon until ctx is cancelled or a SIGINT/SIGTERM is
     received. It attaches to wsURL, writes <sessionID>.json + .sock under
     ~/.scrapfly/sessions/, serves requests, and cleans up on exit.
 
     The daemon is foreground: the caller is responsible for backgrounding (`&`,
-    systemd, tmux). `onReady` is invoked once the socket is listening.
+    systemd, tmux). `onReady` is invoked once the socket is listening, with
+    the Scrapfly run id from the upgrade response (empty when the peer did not
+    advertise one).
+
+    dialBudget bounds the CDP dial. The upgrade response only lands once
+    Scrapfly has allocated a browser, and a cold pool (no warm agent for the
+    requested os/proxy tuple) routinely spends more than a minute there,
+    so the budget is the caller's --timeout rather than a private constant:
+    an operator hitting a cold pool can raise it. Zero or negative bounds the
+    dial by ctx alone.
 
 func SetCurrent(sessionID string) error
     SetCurrent records sessionID as the active session for later invocations.
