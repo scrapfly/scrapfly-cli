@@ -189,6 +189,7 @@ The WSS URL includes your API key as a query param — treat as a secret.`,
 
 type browserLaunchFlags struct {
 	proxyPool    string
+	targetURL    string
 	osSpoof      string
 	country      string
 	lang         string
@@ -220,6 +221,7 @@ type browserLaunchFlags struct {
 
 func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
 	cmd.Flags().StringVar(&f.proxyPool, "proxy-pool", "", "public_datacenter_pool|public_residential_pool")
+	cmd.Flags().StringVar(&f.targetURL, "target-url", "", "URL this session will scrape (not navigated to). Lets Scrapfly pick a proxy that serves the target: without it the choice is blind and a provider refusing the target fails the run with ERR_SOCKS_CONNECTION_FAILED. Absolute URL required")
 	cmd.Flags().StringVar(&f.osSpoof, "os", "", "OS spoof")
 	cmd.Flags().StringVar(&f.country, "country", "", "proxy country (ISO 3166-1 alpha-2)")
 	cmd.Flags().StringVar(&f.lang, "lang", "", "browser UI language base tag, e.g. en (navigator.language; derived from country when unset)")
@@ -259,6 +261,7 @@ func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
 func (f *browserLaunchFlags) toConfig() *scrapfly.CloudBrowserConfig {
 	return &scrapfly.CloudBrowserConfig{
 		ProxyPool:    f.proxyPool,
+		TargetURL:    f.targetURL,
 		OS:           f.osSpoof,
 		Country:      f.country,
 		Lang:         f.lang,
