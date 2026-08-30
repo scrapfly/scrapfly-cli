@@ -23,8 +23,8 @@ func TestBuildDocsSearchURL(t *testing.T) {
 		},
 		{
 			"trailing slash on host",
-			"https://scrapfly.home/", "vnc", "cloud_browser", 3,
-			"https://scrapfly.home/docs/search?include_generic=1&limit=3&product=cloud_browser&q=vnc",
+			"https://api.scrapfly.io/", "vnc", "cloud_browser", 3,
+			"https://api.scrapfly.io/docs/search?include_generic=1&limit=3&product=cloud_browser&q=vnc",
 		},
 	}
 	for _, c := range cases {
