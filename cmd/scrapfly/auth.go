@@ -14,8 +14,7 @@ import (
 )
 
 // dashboardAPIKeyURL is the dashboard page where users can copy or regenerate
-// their project API key. Kept in sync with the `dashboard_overview_project`
-// route in apps/scrapfly/web-app/src/HttpWorker/WebWorker.php.
+// their project API key.
 const dashboardAPIKeyURL = "https://scrapfly.io/dashboard/project"
 
 func newAuthCmd(flags *rootFlags) *cobra.Command {

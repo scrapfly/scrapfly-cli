@@ -33,7 +33,6 @@ dev:
 # dev-local builds dist/$(BIN) against the monorepo working-tree
 # go-scrapfly SDK, then restores go.mod to its release state so
 # the repo stays clean for downstream `make release` / CI runs.
-# Pattern mirrors apps/scrapfly/mcp-cloud/.air.toml's build cmd.
 dev-local:
 	@mkdir -p dist
 	@echo "[dev-local] replacing go-scrapfly -> $(SDK_LOCAL)"
