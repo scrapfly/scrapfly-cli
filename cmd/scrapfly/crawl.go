@@ -27,7 +27,9 @@ Subcommands:
   artifact <uuid>   download WARC or HAR (requires -o/-O)
   cancel <uuid>     stop a running crawl
   search <uuid...>  semantic search over one or more crawls (needs --search at start)
-  prompt <uuid...>  ask a question answered from one or more crawls`,
+  prompt <uuid...>  ask a question answered from one or more crawls
+  refresh <uuid>    re-scrape a crawl in place now, or change its refresh schedule
+  refresh-history <uuid>  the crawl's refresh timeline`,
 		Example: `  # Full synchronous crawl, markdown content
   scrapfly crawl run https://example.com --max-pages 20 --max-depth 2 \
     --content-format markdown
@@ -45,7 +47,11 @@ Subcommands:
   UUID=$(scrapfly crawl run https://example.com --max-pages 20 --search \
     --content-format markdown | jq -r .data.crawler_uuid)
   scrapfly crawl search "$UUID" --query "pricing" --limit 5
-  scrapfly crawl prompt "$UUID" --prompt "What does this site sell?"`,
+  scrapfly crawl prompt "$UUID" --prompt "What does this site sell?"
+
+  # Keep the crawl fresh: re-scrape it daily, in place, under the same UUID
+  scrapfly crawl refresh "$UUID" --enable --interval 86400
+  scrapfly crawl refresh-history "$UUID"`,
 	}
 	cmd.AddCommand(newCrawlStartCmd(flags))
 	cmd.AddCommand(newCrawlStatusCmd(flags))
@@ -59,6 +65,8 @@ Subcommands:
 	cmd.AddCommand(newCrawlWatchCmd(flags))
 	cmd.AddCommand(newCrawlSearchCmd(flags))
 	cmd.AddCommand(newCrawlPromptCmd(flags))
+	cmd.AddCommand(newCrawlRefreshCmd(flags))
+	cmd.AddCommand(newCrawlRefreshHistoryCmd(flags))
 	return cmd
 }
 
@@ -85,6 +93,8 @@ type crawlStartFlags struct {
 	cacheTTL                 int
 	contentFormats           []string
 	search                   bool
+	refresh                  bool
+	refreshInterval          int
 	unblocker                bool
 	proxyPool                string
 	country                  string
@@ -118,6 +128,8 @@ func bindCrawlStartFlags(cmd *cobra.Command, f *crawlStartFlags) {
 	cmd.Flags().IntVar(&f.cacheTTL, "cache-ttl", 0, "cache TTL seconds (0-604800)")
 	cmd.Flags().StringSliceVar(&f.contentFormats, "content-format", nil, "html|clean_html|markdown|text|json|extracted_data|page_metadata (repeatable)")
 	cmd.Flags().BoolVar(&f.search, "search", false, "build a semantic search index during the crawl (query it with crawl search / crawl prompt)")
+	cmd.Flags().BoolVar(&f.refresh, "refresh", false, "keep this crawl fresh: re-scrape its own URLs in place on a period, same UUID")
+	cmd.Flags().IntVar(&f.refreshInterval, "refresh-interval", 0, "seconds between refresh runs, 3600-7776000 (0 = server default)")
 	bindUnblockerFlag(cmd, &f.unblocker, "enable the unblocker (anti-bot bypass) for child scrapes")
 	cmd.Flags().StringVar(&f.proxyPool, "proxy-pool", "", "proxy pool for child scrapes")
 	cmd.Flags().StringVar(&f.country, "country", "", "proxy country for child scrapes")
@@ -151,6 +163,8 @@ func buildCrawlerConfig(url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig
 		CacheTTL:                  f.cacheTTL,
 		CacheClear:                f.cacheClear,
 		Search:                    f.search,
+		Refresh:                   f.refresh,
+		RefreshInterval:           f.refreshInterval,
 		ASP:                       f.unblocker, // SDK field frozen; wire key stays "asp"
 		ProxyPool:                 f.proxyPool,
 		Country:                   f.country,
