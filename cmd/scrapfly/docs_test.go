@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/spf13/cobra"
+)
 
 func TestBuildDocsSearchURL(t *testing.T) {
 	cases := []struct {
@@ -34,4 +39,30 @@ func TestBuildDocsSearchURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+// `batch` is registered under `scrape`, so a bare `scrapfly batch ...` in its
+// Example block is a copy-paste that exits with "unknown command". Assert every
+// example invocation names the path the command is actually reachable at.
+func TestCommandExamplesNameTheRealPath(t *testing.T) {
+	var walk func(cmd *cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		for _, line := range strings.Split(cmd.Example, "\n") {
+			_, invocation, found := strings.Cut(strings.TrimSpace(line), "scrapfly ")
+			if !found {
+				continue
+			}
+			// Examples legitimately invoke other commands (pipelines, or an
+			// alias of a parent). Only flag the copy-paste trap: the command's
+			// own leaf name used as if it were a top-level command.
+			if strings.HasPrefix(invocation, cmd.Name()) && !strings.HasPrefix(invocation, cmd.CommandPath()) {
+				t.Errorf("%q example invokes %q; the command is only reachable as %q",
+					cmd.CommandPath(), invocation, cmd.CommandPath())
+			}
+		}
+		for _, sub := range cmd.Commands() {
+			walk(sub)
+		}
+	}
+	walk(newScrapeCmd(&rootFlags{}))
 }

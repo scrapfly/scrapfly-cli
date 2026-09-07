@@ -46,9 +46,9 @@ country, unblocker, headers, etc.) pipe a JSONL stream of ScrapeConfig objects
 on stdin; shared flags on the command line supply defaults for fields missing
 from each config. A JSONL line may carry either "unblocker" or the deprecated
 "asp" key; an explicit "asp" wins over "unblocker" on the same line.`,
-		Example: `  scrapfly batch --url https://httpbin.dev/get?a=1 --url https://httpbin.dev/get?b=2 --unblocker
-  scrapfly batch --url-file urls.txt --country us
-  jq -c '.[]' configs.json | scrapfly batch`,
+		Example: `  scrapfly scrape batch --url https://httpbin.dev/get?a=1 --url https://httpbin.dev/get?b=2 --unblocker
+  scrapfly scrape batch --url-file urls.txt --country us
+  jq -c '.[]' configs.json | scrapfly scrape batch`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := buildClient(flags)
 			if err != nil {

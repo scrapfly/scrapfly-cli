@@ -167,7 +167,7 @@ OpenAI-compatible endpoint (Ollama, vLLM, …).
 | Scrapfly API            | REST                                             | CLI                                    |
 |-------------------------|--------------------------------------------------|----------------------------------------|
 | Web Scraping            | `GET/POST /scrape`                               | `scrapfly scrape <url>`                |
-| Scrape Batch            | `POST /scrape/batch`                             | `scrapfly batch <urls…>`               |
+| Scrape Batch            | `POST /scrape/batch`                             | `scrapfly scrape batch <urls…>`        |
 | Screenshot              | `POST /screenshot`                               | `scrapfly screenshot <url>`            |
 | Extraction              | `POST /extraction`                               | `scrapfly extract`                     |
 | Classify                | `POST /classify`                                 | `scrapfly classify`                    |
