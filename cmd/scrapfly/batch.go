@@ -16,7 +16,7 @@ import (
 // newBatchCmd exposes the real POST /scrape/batch endpoint. Input is a list
 // of URLs (flag, file, or stdin); each URL is turned into a ScrapeConfig
 // with an auto-generated correlation_id of the form "item-<N>". Extra
-// per-config knobs flow from flags (asp, render_js, country, proxy_pool)
+// per-config knobs flow from flags (unblocker, render_js, country, proxy_pool)
 // and apply uniformly to every entry — for heterogeneous batches, pipe
 // a JSONL stream of ScrapeConfig objects on stdin.
 //
@@ -29,7 +29,7 @@ func newBatchCmd(flags *rootFlags) *cobra.Command {
 		country   string
 		proxyPool string
 		renderJS  bool
-		asp       bool
+		unblocker bool
 		msgpack   bool
 	)
 
@@ -42,10 +42,11 @@ slowest scrape, not the sum of them.
 
 Each --url or line of --url-file becomes a ScrapeConfig with a synthetic
 correlation_id of the form "item-N". For heterogeneous batches (per-config
-country, asp, headers, etc.) pipe a JSONL stream of ScrapeConfig objects on
-stdin; shared flags on the command line supply defaults for fields missing
-from each config.`,
-		Example: `  scrapfly batch --url https://httpbin.dev/get?a=1 --url https://httpbin.dev/get?b=2 --asp
+country, unblocker, headers, etc.) pipe a JSONL stream of ScrapeConfig objects
+on stdin; shared flags on the command line supply defaults for fields missing
+from each config. A JSONL line may carry either "unblocker" or the deprecated
+"asp" key; an explicit "asp" wins over "unblocker" on the same line.`,
+		Example: `  scrapfly batch --url https://httpbin.dev/get?a=1 --url https://httpbin.dev/get?b=2 --unblocker
   scrapfly batch --url-file urls.txt --country us
   jq -c '.[]' configs.json | scrapfly batch`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -54,7 +55,7 @@ from each config.`,
 				return err
 			}
 
-			configs, err := collectBatchConfigs(cmd.InOrStdin(), urls, urlFile, country, proxyPool, renderJS, asp)
+			configs, err := collectBatchConfigs(cmd.InOrStdin(), urls, urlFile, country, proxyPool, renderJS, unblocker)
 			if err != nil {
 				return err
 			}
@@ -102,7 +103,7 @@ from each config.`,
 	cmd.Flags().StringVar(&country, "country", "", "proxy country (ISO 3166-1 alpha-2) applied to every config")
 	cmd.Flags().StringVar(&proxyPool, "proxy-pool", "", "proxy pool name applied to every config")
 	cmd.Flags().BoolVar(&renderJS, "render-js", false, "render JavaScript on every URL in the batch")
-	cmd.Flags().BoolVar(&asp, "asp", false, "enable anti-scraping protection on every URL in the batch")
+	bindUnblockerFlag(cmd, &unblocker, "enable the unblocker (anti-bot bypass) on every URL in the batch")
 	cmd.Flags().BoolVar(&msgpack, "msgpack", false, "negotiate per-part msgpack instead of JSON")
 
 	return cmd
@@ -112,7 +113,7 @@ func collectBatchConfigs(
 	stdin io.Reader,
 	urls []string,
 	urlFile, country, proxyPool string,
-	renderJS, asp bool,
+	renderJS, unblocker bool,
 ) ([]*scrapfly.ScrapeConfig, error) {
 	var configs []*scrapfly.ScrapeConfig
 	template := func(u string, idx int) *scrapfly.ScrapeConfig {
@@ -121,7 +122,7 @@ func collectBatchConfigs(
 			Country:       country,
 			ProxyPool:     scrapfly.ProxyPool(proxyPool),
 			RenderJS:      renderJS,
-			ASP:           asp,
+			ASP:           unblocker, // SDK field frozen; wire key stays "asp"
 			CorrelationID: fmt.Sprintf("item-%d", idx+1),
 		}
 	}
@@ -162,8 +163,8 @@ func collectBatchConfigs(
 			if line == "" {
 				continue
 			}
-			var cfg scrapfly.ScrapeConfig
-			if err := json.Unmarshal([]byte(line), &cfg); err != nil {
+			cfg, lineUnblocker, err := decodeBatchConfigLine([]byte(line))
+			if err != nil {
 				return nil, fmt.Errorf("parse JSONL line: %w", err)
 			}
 			if cfg.CorrelationID == "" {
@@ -178,10 +179,14 @@ func collectBatchConfigs(
 			if !cfg.RenderJS {
 				cfg.RenderJS = renderJS
 			}
-			if !cfg.ASP {
-				cfg.ASP = asp
+			// A line that names either key decides for itself, false included;
+			// the flag is only a default for lines that name neither.
+			if lineUnblocker != nil {
+				cfg.ASP = *lineUnblocker
+			} else {
+				cfg.ASP = unblocker
 			}
-			configs = append(configs, &cfg)
+			configs = append(configs, cfg)
 		}
 		if err := scanner.Err(); err != nil {
 			return nil, fmt.Errorf("read stdin JSONL: %w", err)
@@ -189,4 +194,39 @@ func collectBatchConfigs(
 	}
 
 	return configs, nil
+}
+
+// decodeBatchConfigLine decodes one JSONL ScrapeConfig and returns, separately,
+// the line's own anti-bot decision as a tri-state (nil = the line named
+// neither key).
+//
+// ScrapeConfig carries no json struct tags, so encoding/json case-folds "asp"
+// and "unblocker" onto two *different* fields and leaves precedence unstated.
+// Worse, the SDK's own fallback consults its Unblocker field whenever the
+// legacy bool is false — which cannot distinguish "absent" from "explicitly
+// false", so a line saying {"asp": false, "unblocker": true} would come out
+// enabled. Only this layer can see which keys the line actually contained, so
+// it decides here and clears the SDK's Unblocker field after decoding, leaving
+// ASP as the single field carrying the answer. Decode the original JSON into
+// both structs so differently cased or repeated keys retain document order.
+func decodeBatchConfigLine(line []byte) (*scrapfly.ScrapeConfig, *bool, error) {
+	var bypass struct {
+		ASP       *bool `json:"asp"`
+		Unblocker *bool `json:"unblocker"`
+	}
+	if err := json.Unmarshal(line, &bypass); err != nil {
+		return nil, nil, err
+	}
+
+	var cfg scrapfly.ScrapeConfig
+	if err := json.Unmarshal(line, &cfg); err != nil {
+		return nil, nil, err
+	}
+	cfg.Unblocker = nil
+
+	if bypass.ASP == nil && bypass.Unblocker == nil {
+		return &cfg, nil, nil
+	}
+	resolved := resolveUnblocker(bypass.ASP, bypass.Unblocker)
+	return &cfg, &resolved, nil
 }

@@ -56,7 +56,7 @@ Input modes (mirrors ` + "`scrapfly extract`" + ` piping):
         --status-code 403 --header server:cloudflare --header cf-mitigated:challenge
 
   # Pipe raw body from scrape --proxified (Scrapfly-fetched)
-  scrapfly scrape https://target.example.com/ --asp --proxified \
+  scrapfly scrape https://target.example.com/ --unblocker --proxified \
     | scrapfly scraper classify --url https://target.example.com/ \
         --status-code 403 --header server:cloudflare
 

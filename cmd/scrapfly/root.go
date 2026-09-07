@@ -93,7 +93,7 @@ Output:
   products (screenshots, crawl artifacts) require -o <file> or -O <dir>.
 
 Products:
-  scrape      Web Scraping API     — single URL, rendering, ASP, extraction.
+  scrape      Web Scraping API     — single URL, rendering, unblocker, extraction.
   screenshot  Screenshot API       — dedicated image capture.
   extract     Extraction API       — AI/template-based data extraction.
   crawl       Crawler API          — recursive crawls with status polling.
@@ -101,9 +101,9 @@ Products:
   browser     Browser API          — CDP sessions, unblock, extensions, execute.
 
 Examples:
-  # Scrape with JS render + ASP, markdown output
+  # Scrape with JS render + unblocker, markdown output
   scrapfly scrape https://web-scraping.dev/products \
-    --render-js --asp --country us --format markdown
+    --render-js --unblocker --country us --format markdown
 
   # Screenshot saved into a directory
   scrapfly -O ./shots screenshot https://example.com --resolution 1920x1080

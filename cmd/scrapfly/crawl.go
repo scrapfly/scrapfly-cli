@@ -74,7 +74,7 @@ type crawlStartFlags struct {
 	cache                    bool
 	cacheTTL                 int
 	contentFormats           []string
-	asp                      bool
+	unblocker                bool
 	proxyPool                string
 	country                  string
 	webhookName              string
@@ -106,7 +106,7 @@ func bindCrawlStartFlags(cmd *cobra.Command, f *crawlStartFlags) {
 	cmd.Flags().BoolVar(&f.cache, "cache", false, "enable caching on child scrapes")
 	cmd.Flags().IntVar(&f.cacheTTL, "cache-ttl", 0, "cache TTL seconds (0-604800)")
 	cmd.Flags().StringSliceVar(&f.contentFormats, "content-format", nil, "html|clean_html|markdown|text|json|extracted_data|page_metadata (repeatable)")
-	cmd.Flags().BoolVar(&f.asp, "asp", false, "enable Anti-Scraping Protection for child scrapes")
+	bindUnblockerFlag(cmd, &f.unblocker, "enable the unblocker (anti-bot bypass) for child scrapes")
 	cmd.Flags().StringVar(&f.proxyPool, "proxy-pool", "", "proxy pool for child scrapes")
 	cmd.Flags().StringVar(&f.country, "country", "", "proxy country for child scrapes")
 	cmd.Flags().StringVar(&f.webhookName, "webhook", "", "webhook name")
@@ -138,7 +138,7 @@ func buildCrawlerConfig(url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig
 		Cache:                     f.cache,
 		CacheTTL:                  f.cacheTTL,
 		CacheClear:                f.cacheClear,
-		ASP:                       f.asp,
+		ASP:                       f.unblocker, // SDK field frozen; wire key stays "asp"
 		ProxyPool:                 f.proxyPool,
 		Country:                   f.country,
 		WebhookName:               f.webhookName,

@@ -33,7 +33,7 @@ func newScrapeCmd(flags *rootFlags) *cobra.Command {
 		jsFile             string
 		jsScenarioFile     string
 		autoScroll         bool
-		asp                bool
+		unblocker          bool
 		cache              bool
 		cacheTTL           int
 		cacheClear         bool
@@ -76,7 +76,7 @@ browser data, cost) as JSON, or a human summary with --pretty.
 
 Flag groups:
   Rendering:       --render-js --wait-for-selector --rendering-wait --auto-scroll
-  Anti-bot:        --asp --cost-budget --proxy-pool --country
+  Anti-bot:        --unblocker --cost-budget --proxy-pool --country
   Output format:   --format raw|markdown|clean_html|text [--format-option ...]
   Extraction:      --extraction-prompt | --extraction-model | --extraction-template
   Request shape:   --method --header k=v --cookie n=v --body | --body-file
@@ -84,8 +84,8 @@ Flag groups:
 		Example: `  # Basic markdown scrape
   scrapfly scrape https://web-scraping.dev/products --format markdown
 
-  # JS-rendered, ASP-bypassed, US proxy
-  scrapfly scrape https://example.com --render-js --asp --country us
+  # JS-rendered, unblocked, US proxy
+  scrapfly scrape https://example.com --render-js --unblocker --country us
 
   # POST with JSON body and custom headers
   scrapfly scrape https://httpbin.dev/post --method POST \
@@ -141,7 +141,7 @@ Flag groups:
 				RenderingWait:      renderingWait,
 				RenderingStage:     renderingStage,
 				AutoScroll:         autoScroll,
-				ASP:                asp,
+				ASP:                unblocker, // SDK field frozen; wire key stays "asp"
 				Cache:              cache,
 				CacheTTL:           cacheTTL,
 				CacheClear:         cacheClear,
@@ -349,7 +349,7 @@ Flag groups:
 	cmd.Flags().StringVar(&jsScenarioFile, "js-scenario-file", "", "JSON file with JS scenario steps (array of action objects; see scrapfly.io/docs)")
 	cmd.Flags().BoolVar(&autoScroll, "auto-scroll", false, "auto-scroll page to load lazy content")
 
-	cmd.Flags().BoolVar(&asp, "asp", false, "enable Anti-Scraping Protection bypass")
+	bindUnblockerFlag(cmd, &unblocker, "enable the unblocker (anti-bot bypass)")
 	cmd.Flags().BoolVar(&cache, "cache", false, "enable response caching")
 	cmd.Flags().IntVar(&cacheTTL, "cache-ttl", 0, "cache TTL seconds")
 	cmd.Flags().BoolVar(&cacheClear, "cache-clear", false, "force cache refresh")
@@ -378,7 +378,7 @@ Flag groups:
 
 	cmd.Flags().StringVar(&proxyPool, "proxy-pool", "", "public_datacenter_pool|public_residential_pool")
 	cmd.Flags().IntVar(&timeoutMs, "request-timeout", 0, "upstream request timeout (ms)")
-	cmd.Flags().IntVar(&costBudget, "cost-budget", 0, "max credit cost for ASP retries")
+	cmd.Flags().IntVar(&costBudget, "cost-budget", 0, "max credit cost for unblocker retries")
 	cmd.Flags().StringSliceVar(&tags, "tag", nil, "request tag (repeatable)")
 	cmd.Flags().BoolVar(&debug, "debug", false, "enable Scrapfly debug mode")
 	cmd.Flags().BoolVar(&ssl, "ssl", false, "capture SSL details")

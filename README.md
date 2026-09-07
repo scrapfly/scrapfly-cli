@@ -114,8 +114,9 @@ Resolution order: `--api-key` flag > `SCRAPFLY_API_KEY` env >
 ## Quick start
 
 ```bash
-# Scrape a JS-heavy page with anti-bot + markdown output
-scrapfly scrape https://web-scraping.dev/products --render-js --asp --format markdown
+# Scrape a JS-heavy page with the unblocker + markdown output
+# (--asp is the previous name for --unblocker; it still works, hidden from --help)
+scrapfly scrape https://web-scraping.dev/products --render-js --unblocker --format markdown
 
 # Pipe scrape into extract (two-step: fetch + AI extraction)
 scrapfly scrape https://web-scraping.dev/product/1 --render-js --proxified \

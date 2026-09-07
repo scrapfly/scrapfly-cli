@@ -6,10 +6,38 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	scrapfly "github.com/scrapfly/go-scrapfly"
 	"github.com/spf13/cobra"
 )
+
+// mustBoolPinnedSchema infers the tool input schema and narrows the named
+// properties back to a plain "boolean".
+//
+// The tri-state names are *bool so an absent key stays distinguishable from an
+// explicit false, and jsonschema-go renders a pointer as type
+// ["null","boolean"]. `asp` is frozen and was declared "boolean" before the
+// rename; a widened type on a frozen property is what downstream schema
+// translators trip over (this codebase already carries a workaround for one
+// rejecting a generated construct), so declare what callers may actually send.
+func mustBoolPinnedSchema[T any](properties ...string) *jsonschema.Schema {
+	schema, err := jsonschema.For[T](nil)
+	if err != nil {
+		// Reflection over a literal struct type; a failure here is a
+		// build-time mistake, not a runtime condition.
+		panic(err)
+	}
+	for _, name := range properties {
+		property, ok := schema.Properties[name]
+		if !ok {
+			panic("mcp: schema has no property " + name)
+		}
+		property.Types = nil
+		property.Type = "boolean"
+	}
+	return schema
+}
 
 // newMcpCmd wires every core Scrapfly verb up as an MCP tool. Stdio-only for
 // now (the most common integration path for Cursor / Claude Desktop /
@@ -58,10 +86,16 @@ here). One MCP tool per Scrapfly verb; inputs mirror the CLI flags.`,
 
 // ── Tool argument schemas ─────────────────────────────────────────────
 
+// Tool input schemas are inferred from these structs and are closed
+// (additionalProperties: false), so "asp" and "unblocker" both stay declared
+// permanently: dropping either one turns a pinned older client's call into a
+// hard schema rejection. Both are pointers so an absent key is distinguishable
+// from an explicit false — see resolveUnblocker for the precedence.
 type mcpScrapeArgs struct {
 	URL              string `json:"url"                          jsonschema:"URL to scrape (http/https)"`
 	RenderJS         bool   `json:"render_js,omitempty"          jsonschema:"render the page with a headless browser"`
-	ASP              bool   `json:"asp,omitempty"                jsonschema:"enable anti-bot bypass"`
+	Unblocker        *bool  `json:"unblocker,omitempty"          jsonschema:"enable the unblocker (anti-bot bypass)"`
+	ASP              *bool  `json:"asp,omitempty"                jsonschema:"deprecated alias for unblocker; still honored, and it wins when both are given"`
 	Country          string `json:"country,omitempty"            jsonschema:"ISO country code for the proxy (e.g. us, fr)"`
 	Format           string `json:"format,omitempty"             jsonschema:"response format: raw|markdown|clean_html|text"`
 	ExtractionPrompt string `json:"extraction_prompt,omitempty"  jsonschema:"AI extraction prompt applied to the scraped content"`
@@ -91,7 +125,8 @@ type mcpCrawlArgs struct {
 	MaxPages      int      `json:"max_pages,omitempty"         jsonschema:"page limit (0 = server default)"`
 	MaxDepth      int      `json:"max_depth,omitempty"         jsonschema:"link-depth limit"`
 	ContentFormat []string `json:"content_formats,omitempty"   jsonschema:"content formats: markdown|html|clean_html|text|json|extracted_data|page_metadata"`
-	ASP           bool     `json:"asp,omitempty"               jsonschema:"enable anti-bot bypass on crawled pages"`
+	Unblocker     *bool    `json:"unblocker,omitempty"         jsonschema:"enable the unblocker (anti-bot bypass) on crawled pages"`
+	ASP           *bool    `json:"asp,omitempty"               jsonschema:"deprecated alias for unblocker; still honored, and it wins when both are given"`
 	Country       string   `json:"country,omitempty"           jsonschema:"ISO country code"`
 	MaxWaitS      int      `json:"max_wait_seconds,omitempty"  jsonschema:"max seconds to poll for completion (default 900)"`
 }
@@ -110,6 +145,7 @@ func registerScrapeTool(server *mcpsdk.Server, flags *rootFlags) {
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
 		Name:        "scrape",
 		Description: "Scrape a URL through the Scrapfly Web Scraping API. Returns the scrape envelope (status, content, cost, etc).",
+		InputSchema: mustBoolPinnedSchema[mcpScrapeArgs]("asp", "unblocker"),
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, a mcpScrapeArgs) (*mcpsdk.CallToolResult, any, error) {
 		client, err := buildClient(flags)
 		if err != nil {
@@ -118,7 +154,7 @@ func registerScrapeTool(server *mcpsdk.Server, flags *rootFlags) {
 		cfg := &scrapfly.ScrapeConfig{
 			URL:              a.URL,
 			RenderJS:         a.RenderJS,
-			ASP:              a.ASP,
+			ASP:              resolveUnblocker(a.ASP, a.Unblocker), // wire key stays "asp"
 			Country:          a.Country,
 			ExtractionPrompt: a.ExtractionPrompt,
 			ExtractionModel:  scrapfly.ExtractionModel(a.ExtractionModel),
@@ -202,6 +238,7 @@ func registerCrawlRunTool(server *mcpsdk.Server, flags *rootFlags) {
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
 		Name:        "crawl_run",
 		Description: "Start a crawl and block until it terminates. Returns the final status + discovered URL count.",
+		InputSchema: mustBoolPinnedSchema[mcpCrawlArgs]("asp", "unblocker"),
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, a mcpCrawlArgs) (*mcpsdk.CallToolResult, any, error) {
 		client, err := buildClient(flags)
 		if err != nil {
@@ -211,7 +248,7 @@ func registerCrawlRunTool(server *mcpsdk.Server, flags *rootFlags) {
 			URL:       a.URL,
 			PageLimit: a.MaxPages,
 			MaxDepth:  a.MaxDepth,
-			ASP:       a.ASP,
+			ASP:       resolveUnblocker(a.ASP, a.Unblocker), // wire key stays "asp"
 			Country:   a.Country,
 		}
 		for _, f := range a.ContentFormat {
