@@ -1,5 +1,5 @@
 # Scrapfly CLI — release/dev Makefile.
-# Target names mirror sdk/python/Makefile and sdk/rust/Makefile for parity.
+# Target names mirror the other official Scrapfly SDK repos for parity.
 #
 # Releases are goreleaser-driven (.goreleaser.yaml and
 # .goreleaser-linux-windows.yaml). `make release` tags + pushes; the
@@ -11,11 +11,11 @@ NEXT_VERSION ?=
 BIN := scrapfly
 PKG := ./cmd/scrapfly
 
-# Path to the monorepo go-scrapfly SDK, used by `make dev-local` to
-# build a CLI binary that consumes the working-tree SDK instead of
-# the pinned published release. Override if the CLI lives outside
-# the monorepo.
-SDK_LOCAL ?= $(abspath $(CURDIR)/../../sdk/go)
+# Path to a local go-scrapfly SDK checkout, used by `make dev-local` to
+# build a CLI binary that consumes that working tree instead of the pinned
+# published release. Defaults to a sibling checkout; override for any other
+# layout, e.g. `make dev-local SDK_LOCAL=/path/to/go-scrapfly`.
+SDK_LOCAL ?= $(abspath $(CURDIR)/../go-scrapfly)
 
 .PHONY: init install dev dev-local bump generate-docs check-no-replace release fmt lint test vet
 
@@ -30,7 +30,7 @@ dev:
 	mkdir -p dist
 	go build -trimpath -o dist/$(BIN) $(PKG)
 
-# dev-local builds dist/$(BIN) against the monorepo working-tree
+# dev-local builds dist/$(BIN) against the local working-tree
 # go-scrapfly SDK, then restores go.mod to its release state so
 # the repo stays clean for downstream `make release` / CI runs.
 dev-local:
@@ -72,8 +72,8 @@ generate-docs:
 	done
 
 # `go install <pkg>@version` refuses any module whose go.mod carries a replace
-# directive, and a relative path like ../../sdk/go resolves only inside the
-# monorepo. Tagging with one live turns the documented from-source install into
+# directive, and a relative path resolves only on the machine that set it.
+# Tagging with one live turns the documented from-source install into
 # a hard failure, so block the tag rather than discover it after publishing.
 check-no-replace:
 	@grep -qE '^[[:space:]]*replace[[:space:]]' go.mod && { \

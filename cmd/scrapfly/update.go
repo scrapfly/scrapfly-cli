@@ -25,7 +25,7 @@ import (
 // Auto-update plumbing: GitHub releases are the source of truth for
 // the binary (naming: `scrapfly-<os>-<arch>.tar.gz` + `checksums.txt`,
 // see .goreleaser.yaml). The release-notes RSS feed at
-// {{ public_api_endpoint }}/docs/release-notes/feed.xml is used only
+// https://scrapfly.io/docs/release-notes/feed.xml is used only
 // as an optional "human-readable changelog" render target — the binary
 // and its checksum always come from the GitHub release.
 

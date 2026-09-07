@@ -380,7 +380,7 @@ func newAlertDeleteCmd(flags *rootFlags) *cobra.Command {
 		Aliases: []string{"rm"},
 		Short:   "Delete an alert definition",
 		Long: `Stops further evaluations and notifications immediately. The audit trail
-(alert_event rows in ClickHouse) is preserved. Idempotent on the happy path
+(every event the alert already fired) is preserved. Idempotent on the happy path
 — a second delete for the same UUID returns 404.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -478,7 +478,7 @@ func newAlertPreviewCmd(flags *rootFlags) *cobra.Command {
 		Use:   "preview",
 		Short: "Replay an unsaved rule against historical data (no persistence)",
 		Long: `Report how many times a hypothetical rule WOULD have fired in the lookback
-window, without creating the alert. Uses the same state-machine Tick() the
+window, without creating the alert. Uses the same alert state machine the
 live evaluator uses, so the preview count matches what production would have
 produced.`,
 		RunE: func(cmd *cobra.Command, args []string) error {

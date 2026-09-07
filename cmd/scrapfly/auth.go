@@ -271,7 +271,7 @@ func dashboardURLForHost(apiHost string) string {
 	if apiHost == "" || apiHost == "https://api.scrapfly.io" {
 		return dashboardAPIKeyURL
 	}
-	// Map api.<x> → <x> for the common {prod, dev, home} pairings.
+	// Map api.<x> → <x>: the dashboard is served from the API host's base domain.
 	if strings.Contains(apiHost, "://api.") {
 		base := strings.Replace(apiHost, "://api.", "://", 1)
 		return base + "/dashboard/project"

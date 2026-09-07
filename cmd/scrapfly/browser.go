@@ -239,7 +239,7 @@ func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
 	cmd.Flags().BoolVar(&f.cache, "cache", false, "enable cache")
 	cmd.Flags().BoolVar(&f.blacklist, "blacklist", false, "enable blacklist enforcement")
 	cmd.Flags().BoolVar(&f.debug, "debug", false, "enable debug recording (playback/video)")
-	cmd.Flags().BoolVar(&f.solveCaptcha, "solve-captcha", false, "arm Scrapium's built-in captcha solver (Turnstile, DataDome, reCAPTCHA, geetest). Billed per solve. See https://scrapfly.io/docs/cloud-browser-api/captcha-solver")
+	cmd.Flags().BoolVar(&f.solveCaptcha, "solve-captcha", false, "arm the Cloud Browser's built-in captcha solver (Turnstile, DataDome, reCAPTCHA, geetest). Billed per solve. See https://scrapfly.io/docs/cloud-browser-api/captcha-solver")
 	cmd.Flags().StringVar(&f.resolution, "resolution", "", "viewport e.g. 1920x1080")
 	cmd.Flags().StringSliceVar(&f.extensions, "extension", nil, "extension id to attach (repeatable)")
 	cmd.Flags().StringVar(&f.browserBrand, "browser-brand", "", "chrome|edge|brave|opera")
@@ -347,7 +347,7 @@ func redactWSURL(wsURL string) string {
 // /unblock takes its own config object (no VNC/RTC/vault fields in the SDK's
 // UnblockConfig) and --ws attaches to a URL minted elsewhere, so in both cases
 // the server has already allocated the browser by the time these flags exist.
-// They cannot be applied retroactively: x11vnc is started at allocation, so
+// They cannot be applied retroactively: the VNC server is started at allocation, so
 // re-sending enable_vnc on the CDP connect changes nothing. Failing here beats
 // dropping them silently and leaving the caller waiting on a VNC endpoint that
 // was never opened.
