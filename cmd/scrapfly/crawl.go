@@ -25,7 +25,9 @@ Subcommands:
   urls <uuid>       stream crawled URLs (visited|pending|failed|skipped)
   contents <uuid>   fetch per-URL content (bulk JSON or --plain single URL)
   artifact <uuid>   download WARC or HAR (requires -o/-O)
-  cancel <uuid>     stop a running crawl`,
+  cancel <uuid>     stop a running crawl
+  search <uuid...>  semantic search over one or more crawls (needs --search at start)
+  prompt <uuid...>  ask a question answered from one or more crawls`,
 		Example: `  # Full synchronous crawl, markdown content
   scrapfly crawl run https://example.com --max-pages 20 --max-depth 2 \
     --content-format markdown
@@ -37,7 +39,13 @@ Subcommands:
   scrapfly crawl contents "$UUID" --format markdown --limit 50
 
   # Download a WARC artifact
-  scrapfly -o crawl.warc.gz crawl artifact "$UUID" --type warc`,
+  scrapfly -o crawl.warc.gz crawl artifact "$UUID" --type warc
+
+  # Index the crawl, then search and ask across it
+  UUID=$(scrapfly crawl run https://example.com --max-pages 20 --search \
+    --content-format markdown | jq -r .data.crawler_uuid)
+  scrapfly crawl search "$UUID" --query "pricing" --limit 5
+  scrapfly crawl prompt "$UUID" --prompt "What does this site sell?"`,
 	}
 	cmd.AddCommand(newCrawlStartCmd(flags))
 	cmd.AddCommand(newCrawlStatusCmd(flags))
@@ -49,6 +57,8 @@ Subcommands:
 	cmd.AddCommand(newCrawlContentsBatchCmd(flags))
 	cmd.AddCommand(newCrawlRunCmd(flags))
 	cmd.AddCommand(newCrawlWatchCmd(flags))
+	cmd.AddCommand(newCrawlSearchCmd(flags))
+	cmd.AddCommand(newCrawlPromptCmd(flags))
 	return cmd
 }
 
@@ -74,6 +84,7 @@ type crawlStartFlags struct {
 	cache                    bool
 	cacheTTL                 int
 	contentFormats           []string
+	search                   bool
 	unblocker                bool
 	proxyPool                string
 	country                  string
@@ -106,6 +117,7 @@ func bindCrawlStartFlags(cmd *cobra.Command, f *crawlStartFlags) {
 	cmd.Flags().BoolVar(&f.cache, "cache", false, "enable caching on child scrapes")
 	cmd.Flags().IntVar(&f.cacheTTL, "cache-ttl", 0, "cache TTL seconds (0-604800)")
 	cmd.Flags().StringSliceVar(&f.contentFormats, "content-format", nil, "html|clean_html|markdown|text|json|extracted_data|page_metadata (repeatable)")
+	cmd.Flags().BoolVar(&f.search, "search", false, "build a semantic search index during the crawl (query it with crawl search / crawl prompt)")
 	bindUnblockerFlag(cmd, &f.unblocker, "enable the unblocker (anti-bot bypass) for child scrapes")
 	cmd.Flags().StringVar(&f.proxyPool, "proxy-pool", "", "proxy pool for child scrapes")
 	cmd.Flags().StringVar(&f.country, "country", "", "proxy country for child scrapes")
@@ -138,6 +150,7 @@ func buildCrawlerConfig(url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig
 		Cache:                     f.cache,
 		CacheTTL:                  f.cacheTTL,
 		CacheClear:                f.cacheClear,
+		Search:                    f.search,
 		ASP:                       f.unblocker, // SDK field frozen; wire key stays "asp"
 		ProxyPool:                 f.proxyPool,
 		Country:                   f.country,
