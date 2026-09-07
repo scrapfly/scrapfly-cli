@@ -46,3 +46,8 @@ require (
 	google.golang.org/grpc v1.66.2 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
+
+// LOCAL DEVELOPMENT ONLY. The crawler search/prompt surface lands in
+// go-scrapfly and the CLI at the same time; drop this line and bump the
+// require above once go-scrapfly is tagged with it.
+replace github.com/scrapfly/go-scrapfly => ../../sdk/go

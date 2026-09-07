@@ -17,7 +17,7 @@ PKG := ./cmd/scrapfly
 # the monorepo.
 SDK_LOCAL ?= $(abspath $(CURDIR)/../../sdk/go)
 
-.PHONY: init install dev dev-local bump generate-docs release fmt lint test vet
+.PHONY: init install dev dev-local bump generate-docs check-no-replace release fmt lint test vet
 
 init:
 	go version >/dev/null
@@ -72,7 +72,18 @@ generate-docs:
 		echo >> docs/reference/go-reference.txt; \
 	done
 
-release:
+# `go install <pkg>@version` refuses any module whose go.mod carries a replace
+# directive, and a relative path like ../../sdk/go resolves only inside the
+# monorepo. Tagging with one live turns the documented from-source install into
+# a hard failure, so block the tag rather than discover it after publishing.
+check-no-replace:
+	@grep -qE '^[[:space:]]*replace[[:space:]]' go.mod && { \
+		echo "release: go.mod carries a replace directive; tag the dependency and drop it before releasing"; \
+		grep -nE '^[[:space:]]*replace[[:space:]]' go.mod; \
+		exit 1; \
+	} || true
+
+release: check-no-replace
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=x.y.z [NEXT_VERSION=x.y.(z+1)]"; exit 2; fi
 	@# Branch guard via rev-parse: the old pipe through grep for the
 	@# current-branch marker errors under ugrep (empty subexpression).
