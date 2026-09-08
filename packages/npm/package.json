@@ -1,6 +1,6 @@
 {
   "name": "scrapfly-cli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Scrapfly CLI: agentic scraping, screenshots, AI extraction, crawling, and a cloud browser over CDP. This package downloads the right platform binary on install.",
   "keywords": [
     "scrapfly",
