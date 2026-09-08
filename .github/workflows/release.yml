@@ -209,9 +209,14 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@latest
 
+      # --allow-same-version: `make bump` keeps packages/npm/package.json in step
+      # with the CLI version, so at a tag this usually sets the value already in
+      # the file. Without the flag npm exits 1 ("Version not changed") after the
+      # GitHub release is already published, leaving the wrapper unpublished and
+      # `latest` un-moved.
       - name: Pin npm wrapper version to tag
         working-directory: packages/npm
-        run: npm version --no-git-tag-version "${{ needs.resolve-tag.outputs.version }}"
+        run: npm version --allow-same-version --no-git-tag-version "${{ needs.resolve-tag.outputs.version }}"
 
       # No NODE_AUTH_TOKEN: authentication is OIDC trusted publishing,
       # configured on npmjs.com for this repo + workflow. Provenance is

@@ -69,9 +69,12 @@ bump:
 	@# matching after a refactor is.
 	@grep -qE '^[[:space:]]*(var )?version[[:space:]]*=[[:space:]]*"$(VERSION)"' cmd/scrapfly/root.go || { echo "bump: version not set in cmd/scrapfly/root.go; check its layout"; exit 1; }
 	@grep -qE '^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"$(VERSION)"' packages/npm/package.json || { echo "bump: version not set in packages/npm/package.json; check its layout"; exit 1; }
-	git add cmd/scrapfly/root.go packages/npm/package.json
-	git commit -m "bump version to $(VERSION)"
-	git push
+	@# Idempotent commit: a bump to the version the files already carry stages
+	@# nothing, and a bare `git commit` then exits 1 on "nothing to commit",
+	@# breaking the documented `make bump VERSION=X && make release VERSION=X`
+	@# chain before release ever runs.
+	@git add cmd/scrapfly/root.go packages/npm/package.json; \
+	git diff --cached --quiet || { git commit -m "bump version to $(VERSION)" && git push; }
 
 generate-docs:
 	@mkdir -p docs/reference
