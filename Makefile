@@ -35,6 +35,10 @@ dev:
 # the repo stays clean for downstream `make release` / CI runs.
 dev-local:
 	@mkdir -p dist
+	@# Refuse before editing go.mod: a missing checkout fails `go mod tidy`
+	@# mid-recipe, which skips the restore below and leaves go.mod dirty with a
+	@# replace directive that check-no-replace then rejects at release time.
+	@[ -f "$(SDK_LOCAL)/go.mod" ] || { echo "dev-local: no go.mod under $(SDK_LOCAL); pass SDK_LOCAL=/path/to/go-scrapfly"; exit 2; }
 	@echo "[dev-local] replacing go-scrapfly -> $(SDK_LOCAL)"
 	go mod edit -replace=github.com/scrapfly/go-scrapfly=$(SDK_LOCAL)
 	go mod tidy
@@ -54,10 +58,18 @@ bump:
 	@# inside a `var ( ... )` block. The previous `^var version` anchor silently
 	@# stopped matching after the var block was introduced in 583b4cf.
 	sed -i -E 's/^([[:space:]]*(var )?version[[:space:]]*=[[:space:]]*")[^"]*(")/\1$(VERSION)\3/' cmd/scrapfly/root.go
-	@# Fail loudly if the edit didn't actually change the file — catches future
-	@# refactors of root.go that break the pattern again.
-	git diff --quiet cmd/scrapfly/root.go && { echo "bump: sed did not update version; check root.go layout"; exit 1; } || true
-	git add cmd/scrapfly/root.go
+	@# The npm wrapper carries its own version. release.yml pins it to the tag
+	@# before publishing, so the tarball is always right, but install.js falls
+	@# back to it (`v$${pkg.version}`) when the wrapper runs from a checkout, so
+	@# a stale value there downloads the wrong release assets. It sat at 0.2.0
+	@# for eleven releases because only root.go was bumped here.
+	sed -i -E 's/^([[:space:]]*"version"[[:space:]]*:[[:space:]]*")[^"]*(")/\1$(VERSION)\2/' packages/npm/package.json
+	@# Assert the result rather than that the file changed: a bump re-run for a
+	@# version a file already carries is not an error, a pattern that stopped
+	@# matching after a refactor is.
+	@grep -qE '^[[:space:]]*(var )?version[[:space:]]*=[[:space:]]*"$(VERSION)"' cmd/scrapfly/root.go || { echo "bump: version not set in cmd/scrapfly/root.go; check its layout"; exit 1; }
+	@grep -qE '^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"$(VERSION)"' packages/npm/package.json || { echo "bump: version not set in packages/npm/package.json; check its layout"; exit 1; }
+	git add cmd/scrapfly/root.go packages/npm/package.json
 	git commit -m "bump version to $(VERSION)"
 	git push
 
@@ -108,15 +120,11 @@ lint: vet
 vet:
 	go vet ./...
 
+# Tests run against the go-scrapfly release pinned in go.mod, like CI and like
+# every consumer. The local-SDK round trip this target used to perform died
+# with 9caa6a6 (the required surface is published): it needed a sibling
+# checkout nobody has, and a failure anywhere in it skipped the restore lines
+# and left go.mod carrying a replace directive, which then tripped
+# check-no-replace on the next release. Use dev-local for local-SDK work.
 test:
-	@# Run tests against the local go-scrapfly SDK (same pattern as dev-local
-	# so unit tests can reference the new Classify/ScrapeBatchWithOptions
-	# surface without waiting for an SDK release). go.mod is restored after.
-	@echo "[test] replacing go-scrapfly -> $(SDK_LOCAL)"
-	go mod edit -replace=github.com/scrapfly/go-scrapfly=$(SDK_LOCAL)
-	go mod tidy
-	go test ./...; status=$$?; \
-	echo "[test] dropping replace directive"; \
-	go mod edit -dropreplace=github.com/scrapfly/go-scrapfly; \
-	go mod tidy; \
-	exit $$status
+	go test ./...
