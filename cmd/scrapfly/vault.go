@@ -31,6 +31,36 @@ var (
 	errMissingToken    = fmt.Errorf("missing service-account token: set %s or pass --token", envVaultServiceToken)
 )
 
+// vaultLinkedService is the linked_service discriminator. The API keeps a registry
+// of these and answers 400 for anything absent from it. Collapses into the
+// go-scrapfly type once that module publishes one.
+type vaultLinkedService string
+
+const vaultLinkedServiceOnePassword vaultLinkedService = "1password"
+
+// vaultLinkedServices mirrors the API's linkedServiceRegistry, which stays the
+// authority: this copy only exists to catch a typo before the request.
+var vaultLinkedServices = []vaultLinkedService{vaultLinkedServiceOnePassword}
+
+func vaultLinkedServiceChoices() string {
+	names := make([]string, len(vaultLinkedServices))
+	for i, s := range vaultLinkedServices {
+		names[i] = string(s)
+	}
+	return strings.Join(names, "|")
+}
+
+// parseVaultLinkedService rejects an unregistered name before the request is built.
+// The server would answer 400 anyway; naming the accepted values is the point.
+func parseVaultLinkedService(raw string) (vaultLinkedService, error) {
+	for _, s := range vaultLinkedServices {
+		if vaultLinkedService(raw) == s {
+			return s, nil
+		}
+	}
+	return "", fmt.Errorf("unknown --service %q (accepted: %s)", raw, vaultLinkedServiceChoices())
+}
+
 func newVaultCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "vault",
@@ -437,8 +467,21 @@ type vaultServiceFlags struct {
 	vaultKey          string
 }
 
+// bindRequiredService binds the discriminator for POST /service, which has no
+// server-side default and rejects an empty one.
+func (f *vaultServiceFlags) bindRequiredService(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&f.service, "service", string(vaultLinkedServiceOnePassword),
+		"linked service to mirror from: "+vaultLinkedServiceChoices())
+}
+
+// bindOptionalService binds it for the probe, which the server defaults to
+// 1password itself. Left empty the field is omitted rather than guessed here.
+func (f *vaultServiceFlags) bindOptionalService(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&f.service, "service", "",
+		"linked service to probe: "+vaultLinkedServiceChoices()+"; omitted lets the server default it")
+}
+
 func (f *vaultServiceFlags) bindSelection(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&f.service, "service", "1password", "linked service to mirror from")
 	cmd.Flags().StringVar(&f.token, "token", "", "provider service-account token; prefer "+envVaultServiceToken)
 	cmd.Flags().StringVar(&f.upstreamVaultID, "upstream-vault-id", "", "provider vault id to mirror")
 	cmd.Flags().StringVar(&f.upstreamVaultName, "upstream-vault-name", "", "provider vault title to mirror, when the id is unknown")
@@ -519,9 +562,13 @@ func newVaultServiceLinkCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			service, err := parseVaultLinkedService(f.service)
+			if err != nil {
+				return err
+			}
 			res, err := vaultServiceCall(cmd.Context(), flags, http.MethodPost,
 				vaultServicePath(args[0], ""), nil, key, map[string]any{
-					"linked_service":      f.service,
+					"linked_service":      string(service),
 					"token":               token,
 					"linked_service_data": f.linkedServiceData(),
 				})
@@ -530,6 +577,7 @@ func newVaultServiceLinkCmd(flags *rootFlags) *cobra.Command {
 			})
 		},
 	}
+	f.bindRequiredService(cmd)
 	f.bindSelection(cmd)
 	return cmd
 }
@@ -545,7 +593,10 @@ The selection document is replaced, not merged: pass every rule you want kept.
 The vault key is required only when --token is set.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body := map[string]any{"linked_service": f.service}
+			// No linked_service: PATCH re-decodes against the vault's stored
+			// discriminator and ignores the body field, so a link can never
+			// switch provider.
+			body := map[string]any{}
 			data := f.linkedServiceData()
 			if len(data) > 0 {
 				body["linked_service_data"] = data
@@ -652,7 +703,16 @@ budget is 10s.`,
 			// reads the request body only when it is non-empty.
 			var body map[string]any
 			if token := resolveOptionalServiceToken(f.token); token != "" {
-				body = map[string]any{"linked_service": f.service, "token": token}
+				body = map[string]any{"token": token}
+				// Sent only when asked for: the endpoint defaults an absent
+				// discriminator to 1password on its own.
+				if f.service != "" {
+					service, serr := parseVaultLinkedService(f.service)
+					if serr != nil {
+						return serr
+					}
+					body["linked_service"] = string(service)
+				}
 			}
 			res, err := vaultServiceCall(cmd.Context(), flags, http.MethodPost,
 				vaultServicePath(args[0], "/test"), nil, key, body)
@@ -667,6 +727,7 @@ budget is 10s.`,
 			})
 		},
 	}
+	f.bindOptionalService(cmd)
 	f.bindSelection(cmd)
 	return cmd
 }
