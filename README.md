@@ -162,6 +162,49 @@ ANTHROPIC_API_KEY=... scrapfly agent "Find the first product name and price" \
 Providers: Anthropic (default), OpenAI, Google Gemini, and any
 OpenAI-compatible endpoint (Ollama, vLLM, …).
 
+## Credential vault
+
+`scrapfly vault` manages the credentials the Cloud Browser injects over CDP on
+a session's first page. Items are encrypted under a key generated on create and
+returned once: Scrapfly keeps no copy, and no response ever carries a plaintext
+item secret.
+
+```bash
+# Create a vault; the key is printed once, store it now
+scrapfly vault create checkout --pretty
+
+export SCRAPFLY_VAULT_KEY=<the key>
+
+# Seal a password. Read it from a file or stdin to keep it out of shell history
+echo '{"password":"hunter2"}' | scrapfly vault item create <vault-id> \
+  --type password --label storefront \
+  --origin https://web-scraping.dev/login --username user123 --secret -
+
+scrapfly vault item list <vault-id> --pretty
+
+# Attach it to a session
+scrapfly browser --vault checkout --vault-key "$SCRAPFLY_VAULT_KEY"
+```
+
+Mirroring a 1Password vault instead of entering items by hand:
+
+```bash
+export SCRAPFLY_VAULT_SERVICE_TOKEN=<1Password service-account token>
+
+# Which upstream vaults can the token see?
+scrapfly vault service test <vault-id> --pretty
+
+scrapfly vault service link <vault-id> --upstream-vault-id <id> --sync-mode on_session
+scrapfly vault service sync <vault-id> --pretty
+
+# --keep-items or --drop-items is required; dropping cannot be undone
+scrapfly vault service unlink <vault-id> --keep-items
+```
+
+`SCRAPFLY_VAULT_KEY` and `SCRAPFLY_VAULT_SERVICE_TOKEN` are read for every
+subcommand that needs them, so neither secret has to appear in argv. `vault
+rotate` returns a new key and invalidates the old one for the whole vault.
+
 ## Product coverage
 
 | Scrapfly API            | REST                                             | CLI                                    |
@@ -174,6 +217,7 @@ OpenAI-compatible endpoint (Ollama, vLLM, …).
 | Crawler                 | `POST /crawl` + `/crawl/{uuid}/...`              | `scrapfly crawl {start,run,status,...}`|
 | Browser (CDP)           | `wss://browser.scrapfly.io`                      | `scrapfly browser [start/...]`         |
 | Browser Unblock         | `POST /unblock`                                  | `scrapfly browser <url> --unblock`     |
+| Browser Vault           | `/vault`, `/vault/{id}/item`, `/vault/{id}/service` | `scrapfly vault {list,create,item,service}` |
 | Account                 | `GET /account`                                   | `scrapfly account` / `scrapfly status` |
 
 Every documented SDK field is exposed as a flag. See the
