@@ -36,7 +36,8 @@ var knownSubcommands = map[string]struct{}{
 	"crawl": {}, "schedule": {}, "account": {}, "status": {}, "config": {},
 	"browser": {}, "agent": {}, "selector": {}, "mcp": {},
 	"exit-peer": {}, "auth": {}, "alert": {}, "docs": {}, "vault": {},
-	"update": {}, "version": {}, "help": {}, "completion": {}, "__complete": {},
+	"feedback": {},
+	"update":   {}, "version": {}, "help": {}, "completion": {}, "__complete": {},
 }
 
 // rewriteURLShortcut inserts "scrape" before the first URL-looking arg, as
@@ -184,6 +185,7 @@ Examples:
 	root.AddCommand(newAlertCmd(&flags))
 	root.AddCommand(newVaultCmd(&flags))
 	root.AddCommand(newDocsCmd(&flags))
+	root.AddCommand(newFeedbackCmd(&flags))
 	root.AddCommand(newUpdateCmd(&flags))
 	root.AddCommand(newVersionCmd())
 

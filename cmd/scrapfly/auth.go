@@ -13,9 +13,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// dashboardAPIKeyURL is the dashboard page where users can copy or regenerate
-// their project API key.
-const dashboardAPIKeyURL = "https://scrapfly.io/dashboard/project"
+// defaultWebBaseURL is the web-app origin used when no API host is configured:
+// it serves the dashboard page where users copy or regenerate their project API
+// key, and the customer-facing endpoints reached with that key.
+const defaultWebBaseURL = "https://scrapfly.io"
 
 func newAuthCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
@@ -267,15 +268,20 @@ func openBrowser(url string) error {
 // custom/dev host we swap the "api." prefix for "scrapfly.io" equivalents and
 // keep unknown hosts on their base domain so self-hosted stacks still work.
 func dashboardURLForHost(apiHost string) string {
-	apiHost = strings.TrimSuffix(apiHost, "/")
-	if apiHost == "" || apiHost == "https://api.scrapfly.io" {
-		return dashboardAPIKeyURL
+	return webBaseForHost(apiHost) + "/dashboard/project"
+}
+
+// webBaseForHost maps an API host onto the web-app origin serving the dashboard
+// and the customer-facing endpoints behind it (feedback, the BYOP installer).
+// api.<domain> → <domain>; a host that is already a base domain is kept as-is
+// so self-hosted and dev stacks resolve to themselves.
+func webBaseForHost(apiHost string) string {
+	apiHost = strings.TrimRight(strings.TrimSpace(apiHost), "/")
+	if apiHost == "" {
+		return defaultWebBaseURL
 	}
-	// Map api.<x> → <x>: the dashboard is served from the API host's base domain.
 	if strings.Contains(apiHost, "://api.") {
-		base := strings.Replace(apiHost, "://api.", "://", 1)
-		return base + "/dashboard/project"
+		return strings.Replace(apiHost, "://api.", "://", 1)
 	}
-	// Fall back to appending the dashboard path directly.
-	return apiHost + "/dashboard/project"
+	return apiHost
 }

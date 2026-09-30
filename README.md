@@ -219,6 +219,7 @@ rotate` returns a new key and invalidates the old one for the whole vault.
 | Browser Unblock         | `POST /unblock`                                  | `scrapfly browser <url> --unblock`     |
 | Browser Vault           | `/vault`, `/vault/{id}/item`, `/vault/{id}/service` | `scrapfly vault {list,create,item,service}` |
 | Account                 | `GET /account`                                   | `scrapfly account` / `scrapfly status` |
+| Feedback                | `POST /dashboard/api/feedback` (on `scrapfly.io`) | `scrapfly feedback`                    |
 
 Every documented SDK field is exposed as a flag. See the
 [`scrapfly-cli` agent skill](https://github.com/scrapfly/skills/tree/main/scrapfly-cli/SKILL.md)

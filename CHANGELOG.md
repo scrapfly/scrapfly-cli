@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### `scrapfly feedback`
+
+New command: file product feedback on a Scrapfly surface (an API, the docs, the
+dashboard, the MCP server, a skill, or the CLI itself) without leaving the
+terminal.
+
+```bash
+scrapfly feedback --sentiment negative --feature crawler_api \
+  --message "crawl status returned 200 with an empty urls array after the crawl finished" \
+  --context "Mirroring a 300-page docs site, polling status every 15s, CLI 0.4.1"
+```
+
+`--sentiment`, `--message` and `--context` are required; `--feature` scopes the
+report and an unknown value is rejected with the full list. `--actor` defaults
+to `agent` when a coding-agent environment variable is present, so a report
+written by an agent driving the CLI is stored as its observation rather than the
+developer's own words. Reports are throttled per account per hour, and a
+throttled report is to be dropped, not retried.
+
+This is not support: it opens no ticket and no reply comes back.
+
 ## 0.4.0
 
 ### Behavior change
