@@ -73,7 +73,7 @@ info "source: $url"
 
 fetch() {
   if command -v curl >/dev/null 2>&1; then
-    curl -fSL "$1" -o "$2"
+    curl -fsSL "$1" -o "$2"
   elif command -v wget >/dev/null 2>&1; then
     wget -qO "$2" "$1"
   else
@@ -122,13 +122,6 @@ fi
 mkdir -p "$(dirname "$DEST")"
 mv "$binary" "$DEST"
 chmod 0755 "$DEST"
-
-# macOS Gatekeeper: strip the quarantine attribute. Releases after 0.4.0 are
-# signed and notarized and do not need it; --version can still install an
-# older, unsigned one.
-if [ "$os" = "darwin" ] && command -v xattr >/dev/null 2>&1; then
-  xattr -d com.apple.quarantine "$DEST" >/dev/null 2>&1 || true
-fi
 
 info "installed: $DEST"
 "$DEST" version || true

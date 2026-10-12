@@ -83,8 +83,8 @@ codesign --verify --strict --verbose=2 /path/to/scrapfly
 ```
 
 Releases up to 0.4.0 are unsigned and may hit *"Apple could not verify
-'scrapfly' is free of malware"* on first run. `install.sh` strips the
-quarantine bit for those; after a manual download, run once:
+'scrapfly' is free of malware"* on first run after a browser download. Run
+once:
 
 ```bash
 xattr -d com.apple.quarantine /path/to/scrapfly
