@@ -84,6 +84,24 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # An unset secret reaches goreleaser as an empty string, which fails
+      # deep in the p12 parser. Name the missing one instead.
+      - name: Require signing secrets
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          missing=0
+          for name in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_ISSUER_ID MACOS_NOTARY_KEY_ID MACOS_NOTARY_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::secret $name is not set"
+              missing=1
+            fi
+          done
+          exit $missing
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -91,6 +109,25 @@ jobs:
           args: release --clean --skip=publish --config .goreleaser.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+      # Checks what users download: the binary inside each tarball, not the
+      # build tree. A Developer ID signature carries a TeamIdentifier; an
+      # ad-hoc one (what the Go linker emits on arm64) does not.
+      - name: Verify signatures
+        run: |
+          for archive in dist/scrapfly-darwin-*.tar.gz; do
+            dir=$(mktemp -d)
+            tar -xzf "$archive" -C "$dir"
+            codesign --verify --strict --verbose=2 "$dir/scrapfly"
+            codesign -dv --verbose=4 "$dir/scrapfly" 2>&1 | tee "$dir/info"
+            grep -q '^Authority=Developer ID Application: ' "$dir/info"
+            grep -q '^TeamIdentifier=[A-Z0-9]\{10\}$' "$dir/info"
+            grep -q 'flags=.*runtime' "$dir/info"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: dist-darwin

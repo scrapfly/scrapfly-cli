@@ -30,6 +30,28 @@ universal_binaries:
     # on Apple Silicon can grab the leaner arm64-only archive if they want.
     replace: false
 
+# Developer ID signature + Apple notarization of the three darwin binaries
+# (amd64, arm64, universal: they share the build id). Runs before archives, so
+# the tarballs and checksums-darwin.txt carry the signed bytes. A bare binary
+# cannot be stapled: Gatekeeper looks the notarization up online on first run.
+# No `enabled` gate on a secret: an unsigned macOS release must fail, not ship.
+notarize:
+  macos:
+    - enabled: true
+      ids:
+        - scrapfly
+      sign:
+        # base64 of the Developer ID Application .p12
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        # App Store Connect API key (base64 of the .p8)
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
+
 archives:
   - id: default
     formats: [tar.gz]

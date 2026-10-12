@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Signed macOS binaries
+
+The macOS binaries (`darwin-universal`, `darwin-amd64`, `darwin-arm64`) are
+signed with Scrapfly's Apple Developer ID and notarized by Apple. A manually
+downloaded binary runs without the Gatekeeper prompt and without
+`xattr -d com.apple.quarantine`.
+
 ### `scrapfly feedback`
 
 New command: file product feedback on a Scrapfly surface (an API, the docs, the

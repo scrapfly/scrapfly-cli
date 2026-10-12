@@ -75,17 +75,20 @@ npx scrapfly version
 
 ### macOS Gatekeeper
 
-The released macOS binary is not yet signed with an Apple Developer ID, so
-first-run may hit *"Apple could not verify 'scrapfly' is free of malware"*.
+The macOS binaries are signed with Scrapfly's Apple Developer ID and notarized
+by Apple, so they run without a Gatekeeper prompt. Check a download with:
 
-- `install.sh` strips the quarantine bit automatically.
-- If you downloaded the tarball manually, run once:
-  ```bash
-  xattr -d com.apple.quarantine /path/to/scrapfly
-  ```
-  (or right-click → Open in Finder the first time).
+```bash
+codesign --verify --strict --verbose=2 /path/to/scrapfly
+```
 
-Signing + notarization is on the roadmap.
+Releases up to 0.4.1 are unsigned and may hit *"Apple could not verify
+'scrapfly' is free of malware"* on first run. `install.sh` strips the
+quarantine bit for those; after a manual download, run once:
+
+```bash
+xattr -d com.apple.quarantine /path/to/scrapfly
+```
 
 ### Self-update
 

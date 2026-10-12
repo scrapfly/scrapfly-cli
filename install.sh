@@ -123,9 +123,9 @@ mkdir -p "$(dirname "$DEST")"
 mv "$binary" "$DEST"
 chmod 0755 "$DEST"
 
-# macOS Gatekeeper: strip the quarantine attribute we inherit from the curl
-# download. Until the binary is notarized by an Apple Developer ID, this is
-# what lets `./scrapfly` run without a right-click-Open dance.
+# macOS Gatekeeper: strip the quarantine attribute. Releases after 0.4.1 are
+# signed and notarized and do not need it; --version can still install an
+# older, unsigned one.
 if [ "$os" = "darwin" ] && command -v xattr >/dev/null 2>&1; then
   xattr -d com.apple.quarantine "$DEST" >/dev/null 2>&1 || true
 fi
