@@ -92,13 +92,25 @@ async function extractZip(stream, outDir) {
   }
   if (platform !== 'win32') {
     fs.chmodSync(binTarget, 0o755);
-    // Strip macOS Gatekeeper quarantine attribute so the first run doesn't
-    // hit the "Apple could not verify" dialog.
-    if (platform === 'darwin') {
-      spawnSync('xattr', ['-d', 'com.apple.quarantine', binTarget], { stdio: 'ignore' });
-    }
   }
   console.log(`[scrapfly-cli] installed ${binTarget}`);
+  // macOS: say what Gatekeeper will make of this binary. The check asks Apple
+  // online (a bare binary carries no stapled ticket), so offline reads the
+  // same as a release older than 0.4.1, the first signed one. Report only: a
+  // Node download is never quarantined, so the binary runs either way.
+  if (platform === 'darwin') {
+    const notarized = spawnSync(
+      'codesign',
+      ['--verify', '--strict', '-R=notarized', '--check-notarization', binTarget],
+      { stdio: 'ignore' },
+    );
+    if (notarized.status === 0) {
+      console.log('[scrapfly-cli] macOS: signed with a Developer ID and notarized by Apple');
+    } else {
+      console.log('[scrapfly-cli] macOS: Apple notarization not confirmed (release older than 0.4.1, or offline).');
+      console.log(`[scrapfly-cli]        if macOS blocks the binary: xattr -d com.apple.quarantine ${binTarget}`);
+    }
+  }
   console.log('');
   console.log('  next steps');
   console.log('    1. scrapfly config set-key scp-live-...');

@@ -126,6 +126,19 @@ chmod 0755 "$DEST"
 info "installed: $DEST"
 "$DEST" version || true
 
+# macOS: say what Gatekeeper will make of this binary. The check asks Apple
+# online (a bare binary carries no stapled ticket), so offline reads the same
+# as a release older than 0.4.1, the first signed one. Report only: a curl
+# download is never quarantined, so the binary runs either way.
+if [ "$os" = "darwin" ] && command -v codesign >/dev/null 2>&1; then
+  if codesign --verify --strict -R="notarized" --check-notarization "$DEST" >/dev/null 2>&1; then
+    info "macOS: signed with a Developer ID and notarized by Apple"
+  else
+    info "macOS: Apple notarization not confirmed (release older than 0.4.1, or offline)."
+    info "       if macOS blocks the binary: xattr -d com.apple.quarantine $DEST"
+  fi
+fi
+
 case "$PATH" in
   *"$(dirname "$DEST")"*) ;;
   *) info "note: $(dirname "$DEST") is not on your PATH; add it to start using scrapfly." ;;

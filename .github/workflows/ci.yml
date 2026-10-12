@@ -35,3 +35,31 @@ jobs:
 
       - name: go build
         run: go build -o /tmp/scrapfly ./cmd/scrapfly
+
+
+  # Both installers on a real Mac, against one signed and one unsigned release:
+  # the notarization line they print is the only part of them Linux cannot run.
+  installers-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: install.sh reports a notarized release
+        run: |
+          sh install.sh --version v0.4.1 --prefix "$RUNNER_TEMP/signed" | tee "$RUNNER_TEMP/signed.log"
+          grep -q 'notarized by Apple' "$RUNNER_TEMP/signed.log"
+      - name: install.sh reports an unsigned release
+        run: |
+          sh install.sh --version v0.4.0 --prefix "$RUNNER_TEMP/unsigned" | tee "$RUNNER_TEMP/unsigned.log"
+          grep -q 'notarization not confirmed' "$RUNNER_TEMP/unsigned.log"
+      - name: npm installer reports a notarized release
+        env:
+          SCRAPFLY_CLI_VERSION: v0.4.1
+        run: |
+          node packages/npm/install.js | tee "$RUNNER_TEMP/npm-signed.log"
+          grep -q 'notarized by Apple' "$RUNNER_TEMP/npm-signed.log"
+      - name: npm installer reports an unsigned release
+        env:
+          SCRAPFLY_CLI_VERSION: v0.4.0
+        run: |
+          node packages/npm/install.js | tee "$RUNNER_TEMP/npm-unsigned.log"
+          grep -q 'notarization not confirmed' "$RUNNER_TEMP/npm-unsigned.log"
