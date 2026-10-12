@@ -123,7 +123,7 @@ mkdir -p "$(dirname "$DEST")"
 mv "$binary" "$DEST"
 chmod 0755 "$DEST"
 
-# macOS Gatekeeper: strip the quarantine attribute. Releases after 0.4.1 are
+# macOS Gatekeeper: strip the quarantine attribute. Releases after 0.4.0 are
 # signed and notarized and do not need it; --version can still install an
 # older, unsigned one.
 if [ "$os" = "darwin" ] && command -v xattr >/dev/null 2>&1; then

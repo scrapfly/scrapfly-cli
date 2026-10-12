@@ -82,7 +82,7 @@ by Apple, so they run without a Gatekeeper prompt. Check a download with:
 codesign --verify --strict --verbose=2 /path/to/scrapfly
 ```
 
-Releases up to 0.4.1 are unsigned and may hit *"Apple could not verify
+Releases up to 0.4.0 are unsigned and may hit *"Apple could not verify
 'scrapfly' is free of malware"* on first run. `install.sh` strips the
 quarantine bit for those; after a manual download, run once:
 
