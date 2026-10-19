@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -39,6 +41,93 @@ func mustBoolPinnedSchema[T any](properties ...string) *jsonschema.Schema {
 	return schema
 }
 
+// mcpProxyPoolHint closes the scrape and crawl_run descriptions. It describes
+// the pools and the one refusal that names a pool, and recommends none: a call
+// without proxy_pool is sent as the releases before it sent it.
+const mcpProxyPoolHint = "proxy_pool picks the proxy pool: basic (datacenter proxies, Unblocker off), unblocker (residential proxies with the Unblocker), unblocker_ultra (residential proxies with the Unblocker, never refused: the pool the targets and anti-bot protections priced on their own require), auto (the API picks the pool before the request, from the target's profile: the Unblocker on datacenter proxies, or the pool the target needs; accepted on every target, the ones that require unblocker_ultra included, where their price is added; priced as the pool it runs on) or tor (the Tor network, the only pool that reaches .onion addresses). On ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED, send proxy_pool=unblocker_ultra. The unblocker and asp arguments are deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."
+
+// mcpProxyPools are the proxy_pool values the scrape and crawl_run schemas
+// publish, one word per pool. mcpLegacyProxyPools are accepted from a caller
+// that sends one and named nowhere, validation errors included: the API still
+// runs them, and public_tor_pool is the name customer outputs give the Tor
+// pool, so a caller copying it from a result must be served.
+var (
+	mcpProxyPools       = []any{proxyPoolBasic, proxyPoolUnblocker, proxyPoolUnblockerUltra, proxyPoolAuto, proxyPoolTor}
+	mcpLegacyProxyPools = []string{"public_datacenter_pool", "public_residential_pool", "public_tor_pool"}
+)
+
+// mustScrapingToolSchema pins asp and unblocker to "boolean" and closes
+// proxy_pool on mcpProxyPools. No schema default on proxy_pool: a default
+// would reach every call that omits it and change what a call naming no pool,
+// or only asp or unblocker, sends.
+func mustScrapingToolSchema[T any]() *jsonschema.Schema {
+	schema := mustBoolPinnedSchema[T]("asp", "unblocker")
+	property, ok := schema.Properties["proxy_pool"]
+	if !ok {
+		panic("mcp: schema has no property proxy_pool")
+	}
+	property.Enum = slices.Clone(mcpProxyPools)
+	return schema
+}
+
+// addScrapingTool registers scrape or crawl_run. mcpsdk.AddTool validates a
+// call against the schema it publishes, which refuses a legacy pool name;
+// this validates against that same schema, as mcpsdk.AddTool does (it declares
+// no default to apply), with a legacy pool name set aside. Not a second schema
+// listing the legacy names: its enum error would print them to the caller.
+func addScrapingTool[In any](server *mcpsdk.Server, tool *mcpsdk.Tool, handler mcpsdk.ToolHandlerFor[In, any]) {
+	schema := mustScrapingToolSchema[In]()
+	resolved, err := schema.Resolve(&jsonschema.ResolveOptions{ValidateDefaults: true})
+	if err != nil {
+		// Built from a literal struct type; a failure here is a build-time
+		// mistake, not a runtime condition.
+		panic(err)
+	}
+	tool.InputSchema = schema
+	server.AddTool(tool, func(ctx context.Context, req *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		res, err := callScrapingTool(ctx, req, resolved, handler)
+		if err != nil {
+			// A tool error, as mcpsdk.AddTool reports one: the client reads
+			// it, the session goes on.
+			res = &mcpsdk.CallToolResult{}
+			res.SetError(err)
+		}
+		if res == nil {
+			res = &mcpsdk.CallToolResult{}
+		}
+		return res, nil
+	})
+}
+
+func callScrapingTool[In any](ctx context.Context, req *mcpsdk.CallToolRequest, published *jsonschema.Resolved, handler mcpsdk.ToolHandlerFor[In, any]) (*mcpsdk.CallToolResult, error) {
+	args := map[string]any{}
+	if len(req.Params.Arguments) > 0 {
+		if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
+			return nil, fmt.Errorf("unmarshaling arguments: %w", err)
+		}
+	}
+	checked := args
+	if pool, ok := args["proxy_pool"].(string); ok && slices.Contains(mcpLegacyProxyPools, pool) {
+		checked = maps.Clone(args)
+		delete(checked, "proxy_pool")
+	}
+	if err := published.Validate(&checked); err != nil {
+		return nil, fmt.Errorf("validating \"arguments\": %w", err)
+	}
+	// Decoded from the validated object: the closed schema has already
+	// refused every key that is not one of In's exact names.
+	validated, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	var in In
+	if err := json.Unmarshal(validated, &in); err != nil {
+		return nil, err
+	}
+	res, _, err := handler(ctx, req, in)
+	return res, err
+}
+
 // newMcpCmd wires every core Scrapfly verb up as an MCP tool. Stdio-only for
 // now (the most common integration path for Cursor / Claude Desktop /
 // Claude Code).
@@ -64,7 +153,12 @@ your MCP client (Claude Desktop, Cursor, Claude Code, etc.) as:
     SCRAPFLY_API_KEY: scp-live-...
 
 All existing flags still apply (e.g. --host for dev stacks, --pretty ignored
-here). One MCP tool per Scrapfly verb; inputs mirror the CLI flags.`,
+here). One MCP tool per Scrapfly verb. Tool inputs follow the API, not the
+CLI flags: proxy_pool picks basic, unblocker, unblocker_ultra, auto or tor.
+The unblocker and asp inputs are not the CLI's --unblocker and --asp flags:
+they are deprecated, use proxy_pool (unblocker_ultra for the Unblocker). The
+migration guide covers requests written before the proxy pools:
+https://scrapfly.io/new-pricing#legacy-spellings`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			server := mcpsdk.NewServer(&mcpsdk.Implementation{
 				Name:    "scrapfly",
@@ -90,12 +184,14 @@ here). One MCP tool per Scrapfly verb; inputs mirror the CLI flags.`,
 // (additionalProperties: false), so "asp" and "unblocker" both stay declared
 // permanently: dropping either one turns a pinned older client's call into a
 // hard schema rejection. Both are pointers so an absent key is distinguishable
-// from an explicit false — see resolveUnblocker for the precedence.
+// from an explicit false; see resolveUnblocker for the precedence, and
+// resolveProxyPool for how they combine with proxy_pool.
 type mcpScrapeArgs struct {
 	URL              string `json:"url"                          jsonschema:"URL to scrape (http/https)"`
 	RenderJS         bool   `json:"render_js,omitempty"          jsonschema:"render the page with a headless browser"`
-	Unblocker        *bool  `json:"unblocker,omitempty"          jsonschema:"enable the unblocker (anti-bot bypass)"`
-	ASP              *bool  `json:"asp,omitempty"                jsonschema:"deprecated alias for unblocker; still honored, and it wins when both are given"`
+	ProxyPool        string `json:"proxy_pool,omitempty"         jsonschema:"proxy pool: basic (datacenter proxies, Unblocker off), unblocker (residential proxies with the Unblocker), unblocker_ultra (residential proxies with the Unblocker, never refused: send it on ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED), auto (the API picks the pool from the target's profile, never refused) or tor (the Tor network, for .onion addresses)"`
+	Unblocker        *bool  `json:"unblocker,omitempty"          jsonschema:"Deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."`
+	ASP              *bool  `json:"asp,omitempty"                jsonschema:"Deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."`
 	Country          string `json:"country,omitempty"            jsonschema:"ISO country code for the proxy (e.g. us, fr)"`
 	Format           string `json:"format,omitempty"             jsonschema:"response format: raw|markdown|clean_html|text"`
 	ExtractionPrompt string `json:"extraction_prompt,omitempty"  jsonschema:"AI extraction prompt applied to the scraped content"`
@@ -125,8 +221,9 @@ type mcpCrawlArgs struct {
 	MaxPages      int      `json:"max_pages,omitempty"         jsonschema:"page limit (0 = server default)"`
 	MaxDepth      int      `json:"max_depth,omitempty"         jsonschema:"link-depth limit"`
 	ContentFormat []string `json:"content_formats,omitempty"   jsonschema:"content formats: markdown|html|clean_html|text|json|extracted_data|page_metadata"`
-	Unblocker     *bool    `json:"unblocker,omitempty"         jsonschema:"enable the unblocker (anti-bot bypass) on crawled pages"`
-	ASP           *bool    `json:"asp,omitempty"               jsonschema:"deprecated alias for unblocker; still honored, and it wins when both are given"`
+	ProxyPool     string   `json:"proxy_pool,omitempty"        jsonschema:"proxy pool for crawled pages: basic, unblocker, unblocker_ultra, auto or tor"`
+	Unblocker     *bool    `json:"unblocker,omitempty"         jsonschema:"Deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."`
+	ASP           *bool    `json:"asp,omitempty"               jsonschema:"Deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."`
 	Country       string   `json:"country,omitempty"           jsonschema:"ISO country code"`
 	MaxWaitS      int      `json:"max_wait_seconds,omitempty"  jsonschema:"max seconds to poll for completion (default 900)"`
 }
@@ -142,19 +239,20 @@ type mcpSelectorArgs struct {
 // ── Tool registrations ─────────────────────────────────────────────────
 
 func registerScrapeTool(server *mcpsdk.Server, flags *rootFlags) {
-	mcpsdk.AddTool(server, &mcpsdk.Tool{
+	addScrapingTool(server, &mcpsdk.Tool{
 		Name:        "scrape",
-		Description: "Scrape a URL through the Scrapfly Web Scraping API. Returns the scrape envelope (status, content, cost, etc).",
-		InputSchema: mustBoolPinnedSchema[mcpScrapeArgs]("asp", "unblocker"),
+		Description: "Scrape a URL through the Scrapfly Web Scraping API. Returns the scrape envelope (status, content, cost, etc). " + mcpProxyPoolHint,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, a mcpScrapeArgs) (*mcpsdk.CallToolResult, any, error) {
 		client, err := buildClient(flags)
 		if err != nil {
 			return nil, nil, err
 		}
+		pool, asp := resolveProxyPool(a.ProxyPool, a.ASP, a.Unblocker)
 		cfg := &scrapfly.ScrapeConfig{
 			URL:              a.URL,
 			RenderJS:         a.RenderJS,
-			ASP:              resolveUnblocker(a.ASP, a.Unblocker), // wire key stays "asp"
+			ProxyPool:        scrapfly.ProxyPool(pool),
+			ASP:              asp, // wire key stays "asp"
 			Country:          a.Country,
 			ExtractionPrompt: a.ExtractionPrompt,
 			ExtractionModel:  scrapfly.ExtractionModel(a.ExtractionModel),
@@ -235,20 +333,21 @@ func registerExtractTool(server *mcpsdk.Server, flags *rootFlags) {
 }
 
 func registerCrawlRunTool(server *mcpsdk.Server, flags *rootFlags) {
-	mcpsdk.AddTool(server, &mcpsdk.Tool{
+	addScrapingTool(server, &mcpsdk.Tool{
 		Name:        "crawl_run",
-		Description: "Start a crawl and block until it terminates. Returns the final status + discovered URL count.",
-		InputSchema: mustBoolPinnedSchema[mcpCrawlArgs]("asp", "unblocker"),
+		Description: "Start a crawl and block until it terminates. Returns the final status + discovered URL count. " + mcpProxyPoolHint,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, a mcpCrawlArgs) (*mcpsdk.CallToolResult, any, error) {
 		client, err := buildClient(flags)
 		if err != nil {
 			return nil, nil, err
 		}
+		pool, asp := resolveProxyPool(a.ProxyPool, a.ASP, a.Unblocker)
 		cfg := &scrapfly.CrawlerConfig{
 			URL:       a.URL,
 			PageLimit: a.MaxPages,
 			MaxDepth:  a.MaxDepth,
-			ASP:       resolveUnblocker(a.ASP, a.Unblocker), // wire key stays "asp"
+			ProxyPool: pool,
+			ASP:       asp, // wire key stays "asp"
 			Country:   a.Country,
 		}
 		for _, f := range a.ContentFormat {

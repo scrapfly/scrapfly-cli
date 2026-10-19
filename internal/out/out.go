@@ -48,6 +48,29 @@ func (e *APIError) Error() string {
 	return msg
 }
 
+// HintedError adds the CLI's own next step to an error. The envelope takes its
+// code and message from the wrapped error as if unwrapped, and carries Hint
+// after any hint of its own.
+type HintedError struct {
+	Err  error
+	Hint string
+}
+
+func (e *HintedError) Error() string { return e.Err.Error() }
+
+func (e *HintedError) Unwrap() error { return e.Err }
+
+// joinHints keeps every hint on one line.
+func joinHints(first, second string) string {
+	switch {
+	case first == "":
+		return second
+	case second == "":
+		return first
+	}
+	return first + "; " + second
+}
+
 // WriteSuccess writes a success envelope. When pretty is true, the caller is
 // responsible for having written the human summary first; this function emits
 // nothing in that case to avoid duplicating the payload.
@@ -74,6 +97,15 @@ func toEnvelopeError(err error) *EnvelopeError {
 	if err == nil {
 		return nil
 	}
+	e := envelopeErrorOf(err)
+	var hinted *HintedError
+	if errors.As(err, &hinted) {
+		e.Hint = joinHints(e.Hint, hinted.Hint)
+	}
+	return e
+}
+
+func envelopeErrorOf(err error) *EnvelopeError {
 	e := &EnvelopeError{Message: err.Error()}
 
 	var structured *APIError

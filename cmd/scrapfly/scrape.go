@@ -33,7 +33,7 @@ func newScrapeCmd(flags *rootFlags) *cobra.Command {
 		jsFile             string
 		jsScenarioFile     string
 		autoScroll         bool
-		unblocker          bool
+		pool               proxyPoolFlags
 		cache              bool
 		cacheTTL           int
 		cacheClear         bool
@@ -44,7 +44,6 @@ func newScrapeCmd(flags *rootFlags) *cobra.Command {
 		extractionPrompt   string
 		extractionModel    string
 		extractionTemplate string
-		proxyPool          string
 		timeoutMs          int
 		costBudget         int
 		tags               []string
@@ -76,15 +75,20 @@ browser data, cost) as JSON, or a human summary with --pretty.
 
 Flag groups:
   Rendering:       --render-js --wait-for-selector --rendering-wait --auto-scroll
-  Anti-bot:        --unblocker --cost-budget --proxy-pool --country
+  Proxy/anti-bot:  --unblocker-ultra --unblocker --proxy-pool --country --cost-budget
   Output format:   --format raw|markdown|clean_html|text [--format-option ...]
   Extraction:      --extraction-prompt | --extraction-model | --extraction-template
   Request shape:   --method --header k=v --cookie n=v --body | --body-file
-  Session/cache:   --session --cache --cache-ttl`,
+  Session/cache:   --session --cache --cache-ttl
+
+` + proxyPoolHelp,
 		Example: `  # Basic markdown scrape
   scrapfly scrape https://web-scraping.dev/products --format markdown
 
-  # JS-rendered, unblocked, US proxy
+  # A site that blocks: the Unblocker Ultra pool, never refused
+  scrapfly scrape https://example.com --render-js --unblocker-ultra
+
+  # JS-rendered through the Unblocker pool, US proxy
   scrapfly scrape https://example.com --render-js --unblocker --country us
 
   # POST with JSON body and custom headers
@@ -126,6 +130,7 @@ Flag groups:
 				return cmd.Help()
 			}
 
+			proxyPool, asp := pool.resolve()
 			cfg := &scrapfly.ScrapeConfig{
 				URL:                urls[0],
 				Webhook:            webhook,
@@ -141,7 +146,7 @@ Flag groups:
 				RenderingWait:      renderingWait,
 				RenderingStage:     renderingStage,
 				AutoScroll:         autoScroll,
-				ASP:                unblocker, // SDK field frozen; wire key stays "asp"
+				ASP:                asp, // SDK field frozen; wire key stays "asp"
 				Cache:              cache,
 				CacheTTL:           cacheTTL,
 				CacheClear:         cacheClear,
@@ -265,7 +270,7 @@ Flag groups:
 				if proxified {
 					return fmt.Errorf("--proxified is a single-URL stream; don't combine with batch scraping")
 				}
-				return runBatchScrape(client, cfg, urls, concurrency)
+				return runBatchScrape(client, cfg, urls, concurrency, pool)
 			}
 
 			started := time.Now()
@@ -276,7 +281,7 @@ Flag groups:
 				cfg.ProxifiedResponse = true
 				resp, err := client.ScrapeProxified(cfg)
 				if err != nil {
-					return err
+					return pool.hintUltraRefusal(err)
 				}
 				defer resp.Body.Close()
 				sink := io.Writer(os.Stdout)
@@ -294,7 +299,7 @@ Flag groups:
 
 			result, err := client.Scrape(cfg)
 			if err != nil {
-				return err
+				return pool.hintUltraRefusal(err)
 			}
 			elapsed := time.Since(started)
 			if timing {
@@ -349,7 +354,7 @@ Flag groups:
 	cmd.Flags().StringVar(&jsScenarioFile, "js-scenario-file", "", "JSON file with JS scenario steps (array of action objects; see scrapfly.io/docs)")
 	cmd.Flags().BoolVar(&autoScroll, "auto-scroll", false, "auto-scroll page to load lazy content")
 
-	bindUnblockerFlag(cmd, &unblocker, "enable the unblocker (anti-bot bypass)")
+	bindProxyPoolFlags(cmd, &pool, "")
 	cmd.Flags().BoolVar(&cache, "cache", false, "enable response caching")
 	cmd.Flags().IntVar(&cacheTTL, "cache-ttl", 0, "cache TTL seconds")
 	cmd.Flags().BoolVar(&cacheClear, "cache-clear", false, "force cache refresh")
@@ -376,9 +381,8 @@ Flag groups:
 	cmd.Flags().StringVar(&extractionModel, "extraction-model", "", "extraction model (product, article, ...)")
 	cmd.Flags().StringVar(&extractionTemplate, "extraction-template", "", "saved extraction template name")
 
-	cmd.Flags().StringVar(&proxyPool, "proxy-pool", "", "public_datacenter_pool|public_residential_pool")
 	cmd.Flags().IntVar(&timeoutMs, "request-timeout", 0, "upstream request timeout (ms)")
-	cmd.Flags().IntVar(&costBudget, "cost-budget", 0, "max credit cost for unblocker retries")
+	cmd.Flags().IntVar(&costBudget, "cost-budget", 0, "max API credits the Unblocker may spend on the request; no effect with the Unblocker off")
 	cmd.Flags().StringSliceVar(&tags, "tag", nil, "request tag (repeatable)")
 	cmd.Flags().BoolVar(&debug, "debug", false, "enable Scrapfly debug mode")
 	cmd.Flags().BoolVar(&ssl, "ssl", false, "capture SSL details")
@@ -428,8 +432,8 @@ func readURLsFile(path string) ([]string, error) {
 }
 
 // runBatchScrape fans out via SDK ConcurrentScrape and emits one JSON envelope
-// per line (ndjson) in result order.
-func runBatchScrape(client *scrapfly.Client, template *scrapfly.ScrapeConfig, urls []string, concurrency int) error {
+// per line (ndjson) in result order. pool gives a refused URL its hint.
+func runBatchScrape(client *scrapfly.Client, template *scrapfly.ScrapeConfig, urls []string, concurrency int, pool proxyPoolFlags) error {
 	if concurrency <= 0 {
 		concurrency = 5
 	}
@@ -445,6 +449,9 @@ func runBatchScrape(client *scrapfly.Client, template *scrapfly.ScrapeConfig, ur
 		if item.Error != nil {
 			env.Success = false
 			env.Error = &out.EnvelopeError{Message: item.Error.Error()}
+			if isUltraRefusal(item.Error) {
+				env.Error.Hint = pool.ultraRefusalHint()
+			}
 		} else {
 			env.Success = true
 			env.Data = item.Result

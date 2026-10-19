@@ -95,8 +95,7 @@ type crawlStartFlags struct {
 	search                   bool
 	refresh                  bool
 	refreshInterval          int
-	unblocker                bool
-	proxyPool                string
+	pool                     proxyPoolFlags
 	country                  string
 	webhookName              string
 	webhookEvents            []string
@@ -130,8 +129,7 @@ func bindCrawlStartFlags(cmd *cobra.Command, f *crawlStartFlags) {
 	cmd.Flags().BoolVar(&f.search, "search", false, "build a semantic search index during the crawl (query it with crawl search / crawl prompt)")
 	cmd.Flags().BoolVar(&f.refresh, "refresh", false, "keep this crawl fresh: re-scrape its own URLs in place on a period, same UUID")
 	cmd.Flags().IntVar(&f.refreshInterval, "refresh-interval", 0, "seconds between refresh runs, 3600-7776000 (0 = server default)")
-	bindUnblockerFlag(cmd, &f.unblocker, "enable the unblocker (anti-bot bypass) for child scrapes")
-	cmd.Flags().StringVar(&f.proxyPool, "proxy-pool", "", "proxy pool for child scrapes")
+	bindProxyPoolFlags(cmd, &f.pool, " for child scrapes")
 	cmd.Flags().StringVar(&f.country, "country", "", "proxy country for child scrapes")
 	cmd.Flags().StringVar(&f.webhookName, "webhook", "", "webhook name")
 	cmd.Flags().StringSliceVar(&f.webhookEvents, "webhook-event", nil, "webhook event (repeatable)")
@@ -141,6 +139,7 @@ func bindCrawlStartFlags(cmd *cobra.Command, f *crawlStartFlags) {
 }
 
 func buildCrawlerConfig(url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig, error) {
+	proxyPool, asp := f.pool.resolve()
 	cfg := &scrapfly.CrawlerConfig{
 		URL:                       url,
 		PageLimit:                 f.pageLimit,
@@ -165,8 +164,8 @@ func buildCrawlerConfig(url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig
 		Search:                    f.search,
 		Refresh:                   f.refresh,
 		RefreshInterval:           f.refreshInterval,
-		ASP:                       f.unblocker, // SDK field frozen; wire key stays "asp"
-		ProxyPool:                 f.proxyPool,
+		ASP:                       asp, // SDK field frozen; wire key stays "asp"
+		ProxyPool:                 proxyPool,
 		Country:                   f.country,
 		WebhookName:               f.webhookName,
 	}
@@ -222,8 +221,12 @@ func parseTriState(s string) (*bool, error) {
 func newCrawlStartCmd(flags *rootFlags) *cobra.Command {
 	var f crawlStartFlags
 	cmd := &cobra.Command{
-		Use:     "start <url>",
-		Short:   "Start a new crawl and print the crawler UUID",
+		Use:   "start <url>",
+		Short: "Start a new crawl and print the crawler UUID",
+		Long: `Start a new crawl and print the crawler UUID. The pool flags apply to every
+page the crawl scrapes.
+
+` + proxyPoolHelp,
 		Example: `  scrapfly crawl start https://example.com --max-pages 50 --max-depth 2`,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -488,6 +491,10 @@ func newCrawlRunCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run <url>",
 		Short: "Start a crawl and poll until terminal (DONE|FAILED|CANCELLED)",
+		Long: `Start a crawl and poll until terminal (DONE|FAILED|CANCELLED). The pool flags
+apply to every page the crawl scrapes.
+
+` + proxyPoolHelp,
 		Example: `  scrapfly crawl run https://example.com \
     --max-pages 20 --content-format markdown --poll-interval 5s --max-wait 15m`,
 		Args: cobra.ExactArgs(1),

@@ -1,5 +1,72 @@
 # Changelog
 
+## Unreleased
+
+### Behavior change
+
+- `--unblocker` now selects the Unblocker pool (`proxy_pool=unblocker`, residential proxies with the Unblocker), which a target or anti-bot protection with a price of its own refuses with `ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED` (HTTP 422, not billed): use `--unblocker-ultra` there. 0.4.1 and earlier sent `asp=true`, which is deprecated; the [migration guide](https://scrapfly.io/new-pricing#legacy-spellings) covers requests written before the proxy pools.
+
+### Proxy pools
+
+- `--unblocker` selects the Unblocker pool (`proxy_pool=unblocker`,
+  residential proxies with the Unblocker) on `scrape`, `scrape batch`,
+  `crawl start` and `crawl run`, and the new `--unblocker-ultra` selects the
+  Unblocker Ultra pool (`proxy_pool=unblocker_ultra`). When a site blocks,
+  `--unblocker-ultra` is the flag to use: it is never refused, and costs the
+  same as `--unblocker` except on a target or anti-bot protection with a price
+  of its own, which it adds.
+- `--asp` is now an alias of `--unblocker-ultra`: it sends
+  `proxy_pool=unblocker_ultra` where it sent `asp=true`. It is listed in
+  `--help`, prints no notice, and an explicit `--asp` wins over
+  `--unblocker-ultra` whatever the order; `--asp=false` no longer turns
+  `--unblocker` off.
+- `--proxy-pool` takes `basic` (datacenter proxies, Unblocker off),
+  `unblocker`, `unblocker_ultra` and `auto`, and wins over all three flags;
+  `--unblocker-ultra` wins over `--unblocker`. With `auto` the API picks the
+  pool before the request, from the target's profile: the Unblocker on
+  datacenter proxies, or the pool the target needs. `auto` is accepted on every
+  target, the ones that require `unblocker_ultra` included, where their price
+  is added, and is priced as the pool it runs on. Any other `--proxy-pool`
+  value, such as `tor` or a pool of your own, is sent as given, with
+  `asp=true` when one of the flags is set, as before.
+- On `ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED` the error envelope keeps the API's
+  code and message and adds the hint `retry with --unblocker-ultra`, which
+  also names the `--proxy-pool` value to drop when one picked the refused pool.
+  A `scrape batch` item gets it only when its pool came from the flags, in
+  `data.hint` when refused as a scrape result. An item whose JSONL line named
+  its own `proxy_pool` gets none, even when the line names the pool the flags
+  send, as no flag changes that line.
+- The MCP `scrape` and `crawl_run` tools take `proxy_pool`: `basic`,
+  `unblocker`, `unblocker_ultra`, `auto` or `tor`, the only values their
+  schemas list; a pool name written before the proxy pools is accepted too.
+  Their `unblocker` and `asp` arguments, unlike the CLI flags of the same
+  names, are deprecated: use `proxy_pool` (`unblocker_ultra` for the
+  Unblocker). The [migration guide](https://scrapfly.io/new-pricing#legacy-spellings)
+  covers requests written before the proxy pools. The tools add no
+  `proxy_pool` to a call that names none.
+- `scrape batch` reads a JSONL line's `proxy_pool` key, which was silently
+  dropped (only `ProxyPool` bound), so a line's own pool now applies. A line
+  naming `asp` or `unblocker` takes a pool word from the flags only when the
+  word matches its value (`basic` with `false`; `unblocker`, `unblocker_ultra`
+  or `auto` with `true`), and the word then goes out in place of that key.
+
+These flags behave this way from the CLI release after 0.4.1. On 0.4.1 and
+earlier, `--unblocker` and `--asp` send `asp=true`, and
+`--proxy-pool unblocker_ultra` or `--proxy-pool auto` selects that pool.
+
+### `scrape batch` correlation IDs
+
+- A JSONL line's `correlation_id` key is read, which was silently dropped
+  (only `CorrelationID` bound), so the line's result carries its own ID rather
+  than an `item-N`.
+- `item-N` numbers a config by its position in the batch, one numbering across
+  `--url` and `--url-file`: a blank `--url` still used up its number, so a
+  `--url-file` line could take the ID of a `--url` entry and the batch was
+  refused. A JSONL line without a `correlation_id` never takes an ID another
+  line names; it gets the first `item-N` past the end of the batch instead.
+- Two JSONL lines naming the same `correlation_id` are refused before anything
+  is sent, with the ID and its stdin line numbers, as the API refuses them.
+
 ## 0.4.1
 
 ### Signed macOS binaries

@@ -14,8 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// commandsWithUnblocker is every command that registers the anti-bot toggle.
-// Each entry must behave identically, so they are driven by one table.
+// commandsWithUnblocker is every command that registers the pool flags. Each
+// entry must behave identically, so they are driven by one table.
 func commandsWithUnblocker() map[string]func() *cobra.Command {
 	flags := &rootFlags{}
 	return map[string]func() *cobra.Command{
@@ -26,139 +26,159 @@ func commandsWithUnblocker() map[string]func() *cobra.Command {
 	}
 }
 
-// TestUnblockerAndASPShareOneDestination pins the precedence contract: both
-// names write the same bool, an explicit false on either name switches the
-// feature off, and a supplied --asp wins whatever the order on the command
-// line. Two variables OR-ed together would make every explicit-false case come
-// out true; one shared BoolVar destination would make the last case true.
-func TestUnblockerAndASPShareOneDestination(t *testing.T) {
+// TestUnblockerUltraAndASPShareOneDestination pins the precedence contract:
+// --asp and --unblocker-ultra write the same bool, an explicit false on either
+// name switches it off, and a supplied --asp wins whatever the order on the
+// command line. Two variables OR-ed together would make every explicit-false
+// case come out true; one shared BoolVar destination would make the last case
+// true. --unblocker is another pool, which neither name touches.
+func TestUnblockerUltraAndASPShareOneDestination(t *testing.T) {
 	cases := []struct {
-		name string
-		args []string
-		want string
+		name          string
+		args          []string
+		want          string
+		wantUnblocker string
 	}{
-		{"neither", nil, "false"},
-		{"unblocker only", []string{"--unblocker"}, "true"},
-		{"legacy asp only", []string{"--asp"}, "true"},
-		{"legacy asp explicit false", []string{"--asp=false"}, "false"},
-		{"unblocker explicit false", []string{"--unblocker=false"}, "false"},
+		{"neither", nil, "false", "false"},
+		{"unblocker-ultra only", []string{"--unblocker-ultra"}, "true", "false"},
+		{"asp only", []string{"--asp"}, "true", "false"},
+		{"asp explicit false", []string{"--asp=false"}, "false", "false"},
+		{"unblocker-ultra explicit false", []string{"--unblocker-ultra=false"}, "false", "false"},
+		{"unblocker only", []string{"--unblocker"}, "false", "true"},
+		{"asp beside unblocker", []string{"--asp", "--unblocker"}, "true", "true"},
+		{"asp=false beside unblocker", []string{"--asp=false", "--unblocker"}, "false", "true"},
 		// Order does not decide it: a supplied --asp wins either way.
-		{"asp then unblocker=false", []string{"--asp", "--unblocker=false"}, "true"},
-		{"unblocker then asp=false", []string{"--unblocker", "--asp=false"}, "false"},
-		{"asp=false then unblocker", []string{"--asp=false", "--unblocker"}, "false"},
-		{"unblocker=false then asp", []string{"--unblocker=false", "--asp"}, "true"},
+		{"asp then unblocker-ultra=false", []string{"--asp", "--unblocker-ultra=false"}, "true", "false"},
+		{"unblocker-ultra then asp=false", []string{"--unblocker-ultra", "--asp=false"}, "false", "false"},
+		{"asp=false then unblocker-ultra", []string{"--asp=false", "--unblocker-ultra"}, "false", "false"},
+		{"unblocker-ultra=false then asp", []string{"--unblocker-ultra=false", "--asp"}, "true", "false"},
 	}
 
 	for cmdName, build := range commandsWithUnblocker() {
 		for _, tc := range cases {
 			t.Run(cmdName+"/"+tc.name, func(t *testing.T) {
 				cmd := build()
-				// ParseFlags writes the deprecation notice to os.Stderr; keep
-				// it out of the test log.
-				_, _ = captureStdio(t, func() {
+				stdout, stderr := captureStdio(t, func() {
 					if err := cmd.ParseFlags(tc.args); err != nil {
 						t.Errorf("ParseFlags(%v): %v", tc.args, err)
 					}
 				})
+				if stdout != "" || stderr != "" {
+					t.Errorf("%v printed something: stdout=%q stderr=%q", tc.args, stdout, stderr)
+				}
 
-				unblocker := cmd.Flags().Lookup("unblocker")
-				if unblocker == nil {
-					t.Fatalf("%s has no --unblocker flag", cmdName)
+				ultra := cmd.Flags().Lookup("unblocker-ultra")
+				if ultra == nil {
+					t.Fatalf("%s has no --unblocker-ultra flag", cmdName)
 				}
 				asp := cmd.Flags().Lookup("asp")
 				if asp == nil {
-					t.Fatalf("%s dropped --asp; the legacy name must keep working forever", cmdName)
+					t.Fatalf("%s dropped --asp; the name must keep working forever", cmdName)
 				}
-				if got := unblocker.Value.String(); got != tc.want {
-					t.Errorf("--unblocker = %s, want %s", got, tc.want)
+				if got := ultra.Value.String(); got != tc.want {
+					t.Errorf("--unblocker-ultra = %s, want %s", got, tc.want)
 				}
 				if got := asp.Value.String(); got != tc.want {
 					t.Errorf("--asp = %s, want %s (both names must read one destination)", got, tc.want)
+				}
+				if got := cmd.Flags().Lookup("unblocker").Value.String(); got != tc.wantUnblocker {
+					t.Errorf("--unblocker = %s, want %s", got, tc.wantUnblocker)
 				}
 			})
 		}
 	}
 }
 
-// TestASPFlagHiddenFromHelpAndCompletions asserts the two properties cobra
-// derives from MarkDeprecated: Hidden keeps the flag out of --help, and
-// Hidden||Deprecated is exactly the predicate cobra's completion code
-// (nonCompletableFlag) uses to drop a flag from generated and dynamic shell
-// completions.
-func TestASPFlagHiddenFromHelpAndCompletions(t *testing.T) {
+// TestPoolFlagsInHelp pins what --help shows. Every pool flag is documented:
+// none may carry pflag's deprecation, which hides a flag and prints
+// "deprecated" on every use, and none may be hidden, which also drops it from
+// shell completions (cobra's nonCompletableFlag reads Hidden||Deprecated).
+// The help says plainly which flag to use when a site blocks, what it costs,
+// what --unblocker answers there, and lists auto among the --proxy-pool words.
+// Only the API's asp and unblocker parameters are deprecated, which the help
+// leaves to the migration guide.
+func TestPoolFlagsInHelp(t *testing.T) {
 	for cmdName, build := range commandsWithUnblocker() {
 		t.Run(cmdName, func(t *testing.T) {
 			cmd := build()
-			asp := cmd.Flags().Lookup("asp")
-			if asp == nil {
-				t.Fatal("no --asp flag")
-			}
-			if !asp.Hidden {
-				t.Error("--asp is visible; it must not appear in --help or completions")
-			}
-			if asp.Deprecated == "" {
-				t.Error("--asp carries no deprecation notice")
-			}
-			if unblocker := cmd.Flags().Lookup("unblocker"); unblocker == nil || unblocker.Hidden {
-				t.Error("--unblocker must be present and visible")
+			for _, name := range []string{"unblocker", "unblocker-ultra", "asp", "proxy-pool"} {
+				flag := cmd.Flags().Lookup(name)
+				if flag == nil {
+					t.Fatalf("no --%s flag", name)
+				}
+				if flag.Hidden || flag.Deprecated != "" {
+					t.Errorf("--%s hidden=%v deprecated=%q, want a documented flag", name, flag.Hidden, flag.Deprecated)
+				}
 			}
 
 			usage := cmd.Flags().FlagUsages()
-			if !strings.Contains(usage, "--unblocker") {
-				t.Errorf("--unblocker missing from flag usage:\n%s", usage)
+			for _, want := range []string{
+				"--unblocker ", "--unblocker-ultra ", "--asp ",
+				"proxy_pool=unblocker,", "proxy_pool=unblocker_ultra,",
+				"the flag to use when a site blocks. Never refused",
+				"refuses it with ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED (HTTP 422, not billed): use --unblocker-ultra there",
+				"alias of --unblocker-ultra",
+				"basic (datacenter proxies, Unblocker off), unblocker, unblocker_ultra or auto (the API picks the pool from the target's profile)",
+				"with asp=true if one of those flags is set; the migration guide covers asp: https://scrapfly.io/new-pricing#legacy-spellings",
+			} {
+				if !strings.Contains(usage, want) {
+					t.Errorf("flag usage lacks %q:\n%s", want, usage)
+				}
 			}
-			if strings.Contains(usage, "--asp") {
-				t.Errorf("--asp still listed in flag usage:\n%s", usage)
+
+			long := strings.Join(strings.Fields(cmd.Long), " ")
+			for _, want := range []string{
+				"when a site blocks, --unblocker-ultra is the flag to use",
+				"is never refused, and costs the same as --unblocker except on a target or anti-bot protection with a price of its own, which it adds",
+				"is refused there with ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED (HTTP 422, not billed)",
+				"--asp is an alias of --unblocker-ultra, and --proxy-pool basic|unblocker|unblocker_ultra|auto wins over all three.",
+				"--proxy-pool auto lets the API pick the pool before the request, from the target's profile",
+				"accepted on every target, the ones that require unblocker_ultra included, where their price is added, and is priced as the pool it runs on",
+			} {
+				if !strings.Contains(long, want) {
+					t.Errorf("--help lacks %q:\n%s", want, cmd.Long)
+				}
+			}
+			if strings.Contains(strings.ToLower(usage), "deprecat") {
+				t.Errorf("a flag usage calls something deprecated:\n%s", usage)
+			}
+			for _, sentence := range strings.Split(long, ". ") {
+				if s := strings.ToLower(sentence); strings.Contains(s, "deprecat") && strings.Contains(s, "--") {
+					t.Errorf("--help calls a flag deprecated: %q", sentence)
+				}
 			}
 		})
 	}
 }
 
-// TestASPDeprecationNoticeGoesToStderr guards the JSON envelope: stdout is
-// machine-read, so a notice printed there would corrupt every piped
-// `scrapfly ... | jq` invocation.
-func TestASPDeprecationNoticeGoesToStderr(t *testing.T) {
-	cmd := newScrapeCmd(&rootFlags{})
-	stdout, stderr := captureStdio(t, func() {
-		if err := cmd.ParseFlags([]string{"--asp"}); err != nil {
-			t.Errorf("ParseFlags: %v", err)
-		}
-	})
-
-	if stdout != "" {
-		t.Errorf("deprecation notice leaked to stdout: %q", stdout)
-	}
-	if !strings.Contains(stderr, "--asp has been deprecated") {
-		t.Errorf("stderr = %q, want the --asp deprecation notice", stderr)
-	}
-	if !strings.Contains(stderr, "--unblocker") {
-		t.Errorf("stderr = %q, want it to name the replacement flag", stderr)
-	}
-	if n := strings.Count(strings.TrimRight(stderr, "\n"), "\n"); n != 0 {
-		t.Errorf("notice spans %d extra lines, want one line: %q", n+1, stderr)
+// Every pool flag parses silently: stdout carries the JSON envelope, and none
+// of them is deprecated.
+func TestPoolFlagsPrintNoNotice(t *testing.T) {
+	for _, args := range [][]string{{"--unblocker"}, {"--unblocker-ultra"}, {"--asp"}, {"--asp=false"}, {"--proxy-pool", "unblocker_ultra"}, {"--proxy-pool", "auto"}} {
+		t.Run(args[0], func(t *testing.T) {
+			cmd := newScrapeCmd(&rootFlags{})
+			stdout, stderr := captureStdio(t, func() {
+				if err := cmd.ParseFlags(args); err != nil {
+					t.Errorf("ParseFlags: %v", err)
+				}
+			})
+			if stdout != "" || stderr != "" {
+				t.Errorf("%v printed something: stdout=%q stderr=%q", args, stdout, stderr)
+			}
+		})
 	}
 }
 
-func TestUnblockerNoticeSilentWhenUnused(t *testing.T) {
-	cmd := newScrapeCmd(&rootFlags{})
-	stdout, stderr := captureStdio(t, func() {
-		if err := cmd.ParseFlags([]string{"--unblocker"}); err != nil {
-			t.Errorf("ParseFlags: %v", err)
-		}
-	})
-	if stdout != "" || stderr != "" {
-		t.Errorf("--unblocker printed something: stdout=%q stderr=%q", stdout, stderr)
-	}
-}
-
-// TestBatchJSONLUnblocker covers the per-line batch format. The flag supplies
-// a default only for lines that name neither key.
+// TestBatchJSONLUnblocker covers the per-line batch format. A line naming
+// either key decides the Unblocker for itself; the flag is a default for the
+// lines that name neither, and sends its pool.
 func TestBatchJSONLUnblocker(t *testing.T) {
 	cases := []struct {
-		name string
-		line string
-		flag bool
-		want bool
+		name     string
+		line     string
+		flag     bool
+		want     bool
+		wantPool string
 	}{
 		{name: "unblocker true", line: `{"url":"https://a.test","unblocker":true}`, want: true},
 		{name: "unblocker false", line: `{"url":"https://a.test","unblocker":false}`, flag: true, want: false},
@@ -167,14 +187,15 @@ func TestBatchJSONLUnblocker(t *testing.T) {
 		{name: "asp wins over unblocker", line: `{"url":"https://a.test","asp":false,"unblocker":true}`, want: false},
 		{name: "asp true wins", line: `{"url":"https://a.test","asp":true,"unblocker":false}`, want: true},
 		{name: "neither, flag off", line: `{"url":"https://a.test"}`, want: false},
-		{name: "neither, flag on", line: `{"url":"https://a.test"}`, flag: true, want: true},
-		{name: "explicit null is absent", line: `{"url":"https://a.test","unblocker":null}`, flag: true, want: true},
+		{name: "neither, flag on", line: `{"url":"https://a.test"}`, flag: true, wantPool: "unblocker"},
+		{name: "explicit null is absent", line: `{"url":"https://a.test","unblocker":null}`, flag: true, wantPool: "unblocker"},
+		{name: "line true agrees with the flag", line: `{"url":"https://a.test","asp":true}`, flag: true, wantPool: "unblocker"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// bufio.Reader so isStdinPiped takes the JSONL branch.
-			configs, err := collectBatchConfigs(bufio.NewReader(strings.NewReader(tc.line+"\n")), nil, "", "", "", false, tc.flag)
+			configs, _, err := collectBatchConfigs(bufio.NewReader(strings.NewReader(tc.line+"\n")), nil, "", "", proxyPoolFlags{unblocker: tc.flag}, false)
 			if err != nil {
 				t.Fatalf("collectBatchConfigs: %v", err)
 			}
@@ -186,6 +207,9 @@ func TestBatchJSONLUnblocker(t *testing.T) {
 			// serializes under the frozen "asp" wire key.
 			if cfg.ASP != tc.want {
 				t.Errorf("cfg.ASP = %v, want %v", cfg.ASP, tc.want)
+			}
+			if got := string(cfg.ProxyPool); got != tc.wantPool {
+				t.Errorf("cfg.ProxyPool = %q, want %q", got, tc.wantPool)
 			}
 			if !unblockerFieldIsUnset(cfg) {
 				t.Error("cfg.Unblocker survived decoding; the SDK's own fallback could then override the resolved value")
@@ -202,10 +226,11 @@ func TestBatchJSONLUnblocker(t *testing.T) {
 
 func TestBatchJSONLBypassKeysKeepDocumentOrder(t *testing.T) {
 	cases := []struct {
-		name string
-		keys string
-		flag bool
-		want bool
+		name     string
+		keys     string
+		flag     bool
+		want     bool
+		wantPool string
 	}{
 		{name: "lowercase asp opt-out", keys: `"ASP":true,"asp":false`},
 		{name: "uppercase asp opt-in", keys: `"asp":false,"ASP":true`, want: true},
@@ -213,20 +238,21 @@ func TestBatchJSONLBypassKeysKeepDocumentOrder(t *testing.T) {
 		{name: "uppercase unblocker opt-in", keys: `"unblocker":false,"Unblocker":true`, want: true},
 		{name: "legacy decision beats alias", keys: `"ASP":true,"asp":false,"Unblocker":true`},
 		{name: "null legacy falls back to alias", keys: `"ASP":false,"asp":null,"unblocker":true`, want: true},
-		{name: "null alias falls back to flag", keys: `"Unblocker":false,"unblocker":null`, flag: true, want: true},
+		{name: "null alias falls back to flag", keys: `"Unblocker":false,"unblocker":null`, flag: true, wantPool: "unblocker"},
 		{name: "duplicate key opt-out", keys: `"asp":true,"asp":false`},
+		{name: "duplicate key opt-out beats the flag", keys: `"asp":true,"asp":false`, flag: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			line := `{"URL":"https://a.test",` + tc.keys + `}`
 			// Repeated identical input must make the same billing decision.
 			for range 256 {
-				configs, err := collectBatchConfigs(bufio.NewReader(strings.NewReader(line)), nil, "", "", "", false, tc.flag)
+				configs, _, err := collectBatchConfigs(bufio.NewReader(strings.NewReader(line)), nil, "", "", proxyPoolFlags{unblocker: tc.flag}, false)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if len(configs) != 1 || configs[0].ASP != tc.want || !unblockerFieldIsUnset(configs[0]) {
-					t.Fatalf("JSONL %s: want bypass=%v with no remaining alias, got %+v", line, tc.want, configs)
+				if len(configs) != 1 || configs[0].ASP != tc.want || string(configs[0].ProxyPool) != tc.wantPool || !unblockerFieldIsUnset(configs[0]) {
+					t.Fatalf("JSONL %s: want bypass=%v pool=%q with no remaining alias, got %+v", line, tc.want, tc.wantPool, configs)
 				}
 			}
 		})
@@ -235,7 +261,7 @@ func TestBatchJSONLBypassKeysKeepDocumentOrder(t *testing.T) {
 
 func TestBatchJSONLRejectsNonBooleanUnblocker(t *testing.T) {
 	line := bufio.NewReader(strings.NewReader(`{"url":"https://a.test","unblocker":"yes"}` + "\n"))
-	_, err := collectBatchConfigs(line, nil, "", "", "", false, false)
+	_, _, err := collectBatchConfigs(line, nil, "", "", proxyPoolFlags{}, false)
 	if err == nil {
 		t.Fatal("want an error for a non-boolean unblocker value")
 	}
@@ -325,8 +351,8 @@ func unblockerFieldIsUnset(cfg any) bool {
 }
 
 // captureStdio swaps the process stdout/stderr for pipes around fn. cobra
-// resolves os.Stderr at print time, so this is what actually proves where the
-// deprecation notice lands.
+// resolves os.Stderr at print time, so this is what actually proves that
+// parsing a flag prints nothing.
 func captureStdio(t *testing.T, fn func()) (stdout, stderr string) {
 	t.Helper()
 

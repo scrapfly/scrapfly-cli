@@ -220,7 +220,7 @@ type browserLaunchFlags struct {
 }
 
 func bindBrowserLaunchFlags(cmd *cobra.Command, f *browserLaunchFlags) {
-	cmd.Flags().StringVar(&f.proxyPool, "proxy-pool", "", "public_datacenter_pool|public_residential_pool")
+	cmd.Flags().StringVar(&f.proxyPool, "proxy-pool", "", "Cloud Browser pool: datacenter|residential|tor|byop. The Web Scraping API pools basic, unblocker, unblocker_ultra and auto are refused here with ERR::BROWSER::CONFIG_ERROR")
 	cmd.Flags().StringVar(&f.targetURL, "target-url", "", "URL this session will scrape (not navigated to). Helps Scrapfly's proxy network route the traffic accordingly; routing is decided once, when the session opens. Absolute URL required")
 	cmd.Flags().StringVar(&f.osSpoof, "os", "", "OS spoof")
 	cmd.Flags().StringVar(&f.country, "country", "", "proxy country (ISO 3166-1 alpha-2)")

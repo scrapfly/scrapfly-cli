@@ -117,9 +117,12 @@ Resolution order: `--api-key` flag > `SCRAPFLY_API_KEY` env >
 ## Quick start
 
 ```bash
-# Scrape a JS-heavy page with the unblocker + markdown output
-# (--asp is the previous name for --unblocker; it still works, hidden from --help)
+# Scrape a JS-heavy page through the Unblocker pool + markdown output
 scrapfly scrape https://web-scraping.dev/products --render-js --unblocker --format markdown
+
+# When a site blocks: the Unblocker Ultra pool, never refused (--asp is its
+# alias). Both pool flags work this way from the CLI release after 0.4.1.
+scrapfly scrape https://web-scraping.dev/products --render-js --unblocker-ultra --format markdown
 
 # Pipe scrape into extract (two-step: fetch + AI extraction)
 scrapfly scrape https://web-scraping.dev/product/1 --render-js --proxified \
@@ -133,6 +136,61 @@ scrapfly crawl run https://example.com --max-pages 20 --content-format markdown
 scrapfly crawl artifact <uuid> --type warc -o crawl.warc
 scrapfly crawl parse warc-list crawl.warc --pretty
 ```
+
+## Proxy pools
+
+`scrape`, `scrape batch`, `crawl start` and `crawl run` pick the proxy pool,
+which sets both the proxy network and the Unblocker (anti-bot bypass):
+
+| Flag                         | `proxy_pool`      | Runs on                                                         |
+|------------------------------|-------------------|-----------------------------------------------------------------|
+| `--unblocker-ultra`, `--asp` | `unblocker_ultra` | residential proxies with the Unblocker, never refused           |
+| `--unblocker`                | `unblocker`       | residential proxies with the Unblocker                          |
+| `--proxy-pool basic`         | `basic`           | datacenter proxies, Unblocker off                               |
+| `--proxy-pool auto`          | `auto`            | the pool the API picks from the target's profile, never refused |
+
+When a site blocks, `--unblocker-ultra` is the flag to use: it is never
+refused, and costs the same as `--unblocker` except on a target or anti-bot
+protection with a price of its own, which it adds. Such a target or protection
+refuses `--unblocker` with `ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED` (HTTP 422,
+not billed), and the error envelope keeps the API's code and message and adds
+the hint `retry with --unblocker-ultra`.
+
+`--proxy-pool auto` lets the API pick the pool before the request, from the
+target's profile: the Unblocker on datacenter proxies, or the pool the target
+needs. It is accepted on every target, the ones that require `unblocker_ultra`
+included, where their price is added, and is priced as the pool it runs on.
+
+`--proxy-pool basic|unblocker|unblocker_ultra|auto` names the pool itself and
+wins over the three flags; `--unblocker-ultra` wins over `--unblocker`. `--asp`
+is an alias of `--unblocker-ultra`, and an explicit `--asp` wins when both are
+given. Any other `--proxy-pool` value, such as `tor` or a pool of your own, is
+sent as given, with `asp=true` when any of the three flags is beside it, as
+before. With none of these flags a request runs on the API's default pool,
+Unblocker off.
+
+The flags behave this way from the CLI release after 0.4.1. On 0.4.1 and
+earlier, `--unblocker` and `--asp` send `asp=true` and `--unblocker-ultra` does
+not exist; `--proxy-pool unblocker_ultra` and `--proxy-pool auto` select those
+pools there too.
+
+In a `scrape batch` JSONL line, the `proxy_pool`, `asp` and `unblocker` keys
+mean what they mean to the API, and the flags fill in only what a line leaves
+out. A line naming `asp` or `unblocker` takes a pool word from the flags only
+when the word matches its value (`basic` with `false`; `unblocker`,
+`unblocker_ultra` or `auto` with `true`), and the word then goes out in place
+of that key.
+
+### Deprecated: the `asp` and `unblocker` parameters
+
+The `asp` parameter and its `unblocker` alias, which a JSONL line or an MCP
+tool call may carry and which the flags send as `asp=true` beside another pool
+name, are deprecated: use `proxy_pool` (`unblocker_ultra` for the Unblocker).
+The [migration guide](https://scrapfly.io/new-pricing#legacy-spellings) covers
+the requests written before the proxy pools, the pool names
+`public_datacenter_pool` and `public_residential_pool` included. The
+`--unblocker` and `--asp` flags are not these parameters: they select the
+`unblocker` and `unblocker_ultra` pools.
 
 ## Browser & Agent
 
@@ -281,8 +339,12 @@ client:
 ```
 
 Exposes `scrape`, `screenshot`, `extract`, `crawl_run`, and `selector` as
-tools. Schemas are generated from the flag definitions so the client sees
-exactly the surface the CLI does.
+tools. Their inputs follow the API, not the CLI flags: `proxy_pool` takes
+`basic`, `unblocker`, `unblocker_ultra`, `auto` or `tor`. The `unblocker` and
+`asp` inputs are not the CLI's `--unblocker` and `--asp` flags: they are
+deprecated, use `proxy_pool` (`unblocker_ultra` for the Unblocker). The
+[migration guide](https://scrapfly.io/new-pricing#legacy-spellings) covers
+requests written before the proxy pools.
 
 ## Shell completion
 
