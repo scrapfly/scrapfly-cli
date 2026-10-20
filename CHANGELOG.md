@@ -37,8 +37,9 @@
   its own `proxy_pool` gets none, even when the line names the pool the flags
   send, as no flag changes that line.
 - The MCP `scrape` and `crawl_run` tools take `proxy_pool`: `basic`,
-  `unblocker`, `unblocker_ultra`, `auto` or `tor`, the only values their
-  schemas list; a pool name written before the proxy pools is accepted too.
+  `unblocker`, `unblocker_ultra`, `auto`, `tor` or `public_tor_pool` (the Tor
+  pool's name in results), the only values their schemas list; a pool name
+  written before the proxy pools is accepted too.
   Their `unblocker` and `asp` arguments, unlike the CLI flags of the same
   names, are deprecated: use `proxy_pool` (`unblocker_ultra` for the
   Unblocker). The [migration guide](https://scrapfly.io/new-pricing#legacy-spellings)

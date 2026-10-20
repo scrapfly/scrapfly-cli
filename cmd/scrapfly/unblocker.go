@@ -24,6 +24,8 @@ const (
 	// public_tor_pool. Not a pool word: asp still decides the Unblocker on
 	// it.
 	proxyPoolTor = "tor"
+	// proxyPoolPublicTor is the Tor pool as results name it, a current name, not one written before the pools.
+	proxyPoolPublicTor = "public_tor_pool"
 )
 
 // errUnblockerUltraRequired is the API's refusal of basic and unblocker on a

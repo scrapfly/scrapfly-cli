@@ -97,8 +97,12 @@ func TestMcpToolSchemasDeclareProxyPools(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(string(encoded), "public_") {
-				t.Errorf("%s advertises a public_ pool name: %s", tool.Name, encoded)
+			// public_tor_pool is the Tor pool's current name; the two others were
+			// written before the proxy pools and stay unadvertised.
+			for _, legacy := range mcpLegacyProxyPools {
+				if strings.Contains(string(encoded), legacy) {
+					t.Errorf("%s advertises the legacy pool name %s: %s", tool.Name, legacy, encoded)
+				}
 			}
 			if strings.Contains(strings.ToLower(string(encoded)), "legacy") {
 				t.Errorf("%s describes a legacy input: %s", tool.Name, encoded)
@@ -123,7 +127,7 @@ func TestMcpToolSchemasDeclareProxyPools(t *testing.T) {
 			if pool.Default != nil {
 				t.Errorf("%s proxy_pool carries a default %s", tool.Name, pool.Default)
 			}
-			if want := []any{"basic", "unblocker", "unblocker_ultra", "auto", "tor"}; !slices.Equal(pool.Enum, want) {
+			if want := []any{"basic", "unblocker", "unblocker_ultra", "auto", "tor", "public_tor_pool"}; !slices.Equal(pool.Enum, want) {
 				t.Errorf("%s proxy_pool enum = %v, want %v", tool.Name, pool.Enum, want)
 			}
 			if !strings.Contains(pool.Description, "auto") {
@@ -218,10 +222,11 @@ func TestMcpScrapeToolSendsTheResolvedPool(t *testing.T) {
 		{map[string]any{"url": "https://example.test", "asp": true, "unblocker": false}, "", "true"},
 		{map[string]any{"url": "https://example.test", "proxy_pool": "tor"}, "tor", ""},
 		{map[string]any{"url": "https://example.test", "proxy_pool": "tor", "unblocker": true}, "tor", "true"},
+		// The Tor pool under the name results give it, a published value.
+		{map[string]any{"url": "https://example.test", "proxy_pool": "public_tor_pool"}, "public_tor_pool", ""},
 		// Legacy pool names are served though no schema lists them.
 		{map[string]any{"url": "https://example.test", "proxy_pool": "public_residential_pool", "asp": true}, "public_residential_pool", "true"},
 		{map[string]any{"url": "https://example.test", "proxy_pool": "public_datacenter_pool"}, "public_datacenter_pool", ""},
-		{map[string]any{"url": "https://example.test", "proxy_pool": "public_tor_pool"}, "public_tor_pool", ""},
 	} {
 		mu.Lock()
 		queries = nil
@@ -256,7 +261,7 @@ func TestMcpScrapeToolSendsTheResolvedPool(t *testing.T) {
 		"auto in capitals":                       {"url": "https://example.test", "proxy_pool": "AUTO"},
 		"a key the schema lacks":                 {"url": "https://example.test", "URL": "https://other.test"},
 		"a legacy pool beside a key it lacks":    {"url": "https://example.test", "proxy_pool": "public_residential_pool", "URL": "https://other.test"},
-		"a legacy pool beside a non-boolean asp": {"url": "https://example.test", "proxy_pool": "public_tor_pool", "asp": "yes"},
+		"a legacy pool beside a non-boolean asp": {"url": "https://example.test", "proxy_pool": "public_datacenter_pool", "asp": "yes"},
 		"a non-boolean toggle":                   {"url": "https://example.test", "unblocker": "yes"},
 		"no url":                                 {"proxy_pool": "unblocker"},
 		"no url beside a legacy pool":            {"proxy_pool": "public_datacenter_pool"},
@@ -279,7 +284,7 @@ func TestMcpScrapeToolSendsTheResolvedPool(t *testing.T) {
 				}
 			}
 		}
-		if strings.Contains(text, "public_") {
+		if strings.Contains(text, "public_datacenter_pool") || strings.Contains(text, "public_residential_pool") {
 			t.Errorf("%s: the error names a legacy pool: %s", name, text)
 		}
 		mu.Lock()

@@ -44,16 +44,16 @@ func mustBoolPinnedSchema[T any](properties ...string) *jsonschema.Schema {
 // mcpProxyPoolHint closes the scrape and crawl_run descriptions. It describes
 // the pools and the one refusal that names a pool, and recommends none: a call
 // without proxy_pool is sent as the releases before it sent it.
-const mcpProxyPoolHint = "proxy_pool picks the proxy pool: basic (datacenter proxies, Unblocker off), unblocker (residential proxies with the Unblocker), unblocker_ultra (residential proxies with the Unblocker, never refused: the pool the targets and anti-bot protections priced on their own require), auto (the API picks the pool before the request, from the target's profile: the Unblocker on datacenter proxies, or the pool the target needs; accepted on every target, the ones that require unblocker_ultra included, where their price is added; priced as the pool it runs on) or tor (the Tor network, the only pool that reaches .onion addresses). On ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED, send proxy_pool=unblocker_ultra. The unblocker and asp arguments are deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."
+const mcpProxyPoolHint = "proxy_pool picks the proxy pool: basic (datacenter proxies, Unblocker off), unblocker (residential proxies with the Unblocker), unblocker_ultra (residential proxies with the Unblocker, never refused: the pool the targets and anti-bot protections priced on their own require), auto (the API picks the pool before the request, from the target's profile: the Unblocker on datacenter proxies, or the pool the target needs; accepted on every target, the ones that require unblocker_ultra included, where their price is added; priced as the pool it runs on) or tor, also named public_tor_pool as results name it (the Tor network, the only pool that reaches .onion addresses). On ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED, send proxy_pool=unblocker_ultra. The unblocker and asp arguments are deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."
 
 // mcpProxyPools are the proxy_pool values the scrape and crawl_run schemas
-// publish, one word per pool. mcpLegacyProxyPools are accepted from a caller
-// that sends one and named nowhere, validation errors included: the API still
-// runs them, and public_tor_pool is the name customer outputs give the Tor
-// pool, so a caller copying it from a result must be served.
+// publish: the four pool words, and the Tor pool under both of its names, tor
+// and public_tor_pool, the one results give it. mcpLegacyProxyPools, the pool
+// names written before the proxy pools, are accepted from a caller that sends
+// one and named nowhere, validation errors included: the API still runs them.
 var (
-	mcpProxyPools       = []any{proxyPoolBasic, proxyPoolUnblocker, proxyPoolUnblockerUltra, proxyPoolAuto, proxyPoolTor}
-	mcpLegacyProxyPools = []string{"public_datacenter_pool", "public_residential_pool", "public_tor_pool"}
+	mcpProxyPools       = []any{proxyPoolBasic, proxyPoolUnblocker, proxyPoolUnblockerUltra, proxyPoolAuto, proxyPoolTor, proxyPoolPublicTor}
+	mcpLegacyProxyPools = []string{"public_datacenter_pool", "public_residential_pool"}
 )
 
 // mustScrapingToolSchema pins asp and unblocker to "boolean" and closes
@@ -154,7 +154,8 @@ your MCP client (Claude Desktop, Cursor, Claude Code, etc.) as:
 
 All existing flags still apply (e.g. --host for dev stacks, --pretty ignored
 here). One MCP tool per Scrapfly verb. Tool inputs follow the API, not the
-CLI flags: proxy_pool picks basic, unblocker, unblocker_ultra, auto or tor.
+CLI flags: proxy_pool picks basic, unblocker, unblocker_ultra, auto, tor or
+public_tor_pool.
 The unblocker and asp inputs are not the CLI's --unblocker and --asp flags:
 they are deprecated, use proxy_pool (unblocker_ultra for the Unblocker). The
 migration guide covers requests written before the proxy pools:
@@ -189,7 +190,7 @@ https://scrapfly.io/new-pricing#legacy-spellings`,
 type mcpScrapeArgs struct {
 	URL              string `json:"url"                          jsonschema:"URL to scrape (http/https)"`
 	RenderJS         bool   `json:"render_js,omitempty"          jsonschema:"render the page with a headless browser"`
-	ProxyPool        string `json:"proxy_pool,omitempty"         jsonschema:"proxy pool: basic (datacenter proxies, Unblocker off), unblocker (residential proxies with the Unblocker), unblocker_ultra (residential proxies with the Unblocker, never refused: send it on ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED), auto (the API picks the pool from the target's profile, never refused) or tor (the Tor network, for .onion addresses)"`
+	ProxyPool        string `json:"proxy_pool,omitempty"         jsonschema:"proxy pool: basic (datacenter proxies, Unblocker off), unblocker (residential proxies with the Unblocker), unblocker_ultra (residential proxies with the Unblocker, never refused: send it on ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED), auto (the API picks the pool from the target's profile, never refused) or tor / public_tor_pool (the Tor network, for .onion addresses)"`
 	Unblocker        *bool  `json:"unblocker,omitempty"          jsonschema:"Deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."`
 	ASP              *bool  `json:"asp,omitempty"                jsonschema:"Deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."`
 	Country          string `json:"country,omitempty"            jsonschema:"ISO country code for the proxy (e.g. us, fr)"`
@@ -221,7 +222,7 @@ type mcpCrawlArgs struct {
 	MaxPages      int      `json:"max_pages,omitempty"         jsonschema:"page limit (0 = server default)"`
 	MaxDepth      int      `json:"max_depth,omitempty"         jsonschema:"link-depth limit"`
 	ContentFormat []string `json:"content_formats,omitempty"   jsonschema:"content formats: markdown|html|clean_html|text|json|extracted_data|page_metadata"`
-	ProxyPool     string   `json:"proxy_pool,omitempty"        jsonschema:"proxy pool for crawled pages: basic, unblocker, unblocker_ultra, auto or tor"`
+	ProxyPool     string   `json:"proxy_pool,omitempty"        jsonschema:"proxy pool for crawled pages: basic, unblocker, unblocker_ultra, auto, tor or public_tor_pool"`
 	Unblocker     *bool    `json:"unblocker,omitempty"         jsonschema:"Deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."`
 	ASP           *bool    `json:"asp,omitempty"               jsonschema:"Deprecated: use proxy_pool (unblocker_ultra for the Unblocker)."`
 	Country       string   `json:"country,omitempty"           jsonschema:"ISO country code"`
