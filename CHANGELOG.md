@@ -68,6 +68,12 @@ earlier, `--unblocker` and `--asp` send `asp=true`, and
 - Two JSONL lines naming the same `correlation_id` are refused before anything
   is sent, with the ID and its stdin line numbers, as the API refuses them.
 
+### macOS 13 or later
+
+The binaries are built with Go 1.27, so the macOS builds need macOS 13 Ventura
+or later; 0.4.1 supported macOS 12 Monterey. Building from source needs Go 1.27
+or later.
+
 ## 0.4.1
 
 ### Signed macOS binaries

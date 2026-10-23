@@ -57,9 +57,10 @@ Or grab a release tarball directly from
 [Releases](https://github.com/scrapfly/scrapfly-cli/releases) - artifacts
 follow `scrapfly-{os}-{arch}.tar.gz` (`scrapfly-windows-amd64.zip` on
 Windows). Supported: `darwin-universal`, `darwin-amd64`, `darwin-arm64`,
-`linux-amd64`, `linux-arm64`, `windows-amd64`.
+`linux-amd64`, `linux-arm64`, `windows-amd64`. The macOS builds need macOS 13
+Ventura or later.
 
-From source (Go 1.24+):
+From source (Go 1.27+):
 
 ```bash
 go install github.com/scrapfly/scrapfly-cli/cmd/scrapfly@latest
