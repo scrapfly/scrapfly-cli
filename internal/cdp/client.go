@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,6 +46,10 @@ type Message struct {
 	Result    json.RawMessage `json:"result,omitempty"`
 	Error     *RPCError       `json:"error,omitempty"`
 	SessionID string          `json:"sessionId,omitempty"`
+
+	// At is when readLoop received an event: the wire carries no clock, and the
+	// order and spacing of events is what a protocol-level check reads.
+	At time.Time `json:"-"`
 }
 
 // RPCError mirrors the CDP error envelope.
@@ -210,6 +215,30 @@ func (c *Client) WaitEvent(ctx context.Context, method string, match func(json.R
 	return nil, fmt.Errorf("timeout waiting for %s", method)
 }
 
+// DrainEvents returns the buffered events of the given methods (every one when
+// none is given), oldest first, and removes them from the buffer when clear is
+// set. The buffer keeps the last 256 events.
+func (c *Client) DrainEvents(methods []string, clear bool) []*Message {
+	c.eventsMu.Lock()
+	defer c.eventsMu.Unlock()
+
+	var picked, kept []*Message
+	for _, e := range c.events {
+		if len(methods) == 0 || slices.Contains(methods, e.Method) {
+			picked = append(picked, e)
+			if !clear {
+				kept = append(kept, e)
+			}
+
+			continue
+		}
+		kept = append(kept, e)
+	}
+	c.events = kept
+
+	return picked
+}
+
 func (c *Client) readLoop() {
 	defer close(c.doneCh)
 	ctx := context.Background()
@@ -242,6 +271,7 @@ func (c *Client) readLoop() {
 			continue
 		}
 		// Event — buffer with a cap.
+		m.At = time.Now()
 		c.eventsMu.Lock()
 		c.events = append(c.events, &m)
 		if len(c.events) > 256 {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	scrapfly "github.com/scrapfly/go-scrapfly"
 	"github.com/scrapfly/scrapfly-cli/internal/cdp"
@@ -26,6 +27,8 @@ import (
 //	{"action":"scroll","direction":"down","amount":500,"ref":"e3"}
 //	{"action":"screenshot","fullpage":false}
 //	{"action":"eval","js":"document.title"}
+//	{"action":"cdp","method":"Page.navigate","params":{"url":"https://..."},"timeout_s":30}
+//	{"action":"events","methods":["Page.frameNavigated"],"clear":true}
 //	{"action":"close"}
 type action struct {
 	Action    string  `json:"action"`
@@ -36,6 +39,13 @@ type action struct {
 	Direction string  `json:"direction,omitempty"`
 	Amount    float64 `json:"amount,omitempty"`
 	FullPage  bool    `json:"fullpage,omitempty"`
+
+	// cdp and events: the protocol itself, for checking what the browser does rather than what an action reports.
+	Method   string          `json:"method,omitempty"`
+	Params   json.RawMessage `json:"params,omitempty"`
+	TimeoutS float64         `json:"timeout_s,omitempty"`
+	Methods  []string        `json:"methods,omitempty"`
+	Clear    bool            `json:"clear,omitempty"`
 }
 
 func newBrowserExecuteCmd(flags *rootFlags) *cobra.Command {
@@ -56,6 +66,16 @@ on stdout (envelope per action). The vocabulary is deliberately small so LLM
 tool-use loops can drive the browser directly:
 
   open / snapshot / click / type / scroll / screenshot / eval / close
+
+Two more reach the protocol itself, to check what the browser does rather than
+what an action reports:
+
+  cdp     {"action":"cdp","method":"Page.getNavigationResponse","params":{},"timeout_s":60}
+          one raw call on the page session; the answer carries elapsed_ms, a call
+          that has not answered by timeout_s fails with the time it waited
+  events  {"action":"events","methods":["Page.frameNavigated"],"clear":true}
+          the events the page session buffered (the last 256), each with the time
+          it was received; no methods = all of them, clear empties what it returns
 
 Inputs (mutually exclusive):
   --ws <url>        connect to an existing CDP WebSocket
@@ -283,6 +303,46 @@ func runOne(ctx context.Context, s *cdp.Session, line string, flags *rootFlags, 
 			return err
 		}
 		return out.WriteSuccess(os.Stdout, false, "browser.eval", map[string]any{"value": v})
+
+	case "cdp":
+		if a.Method == "" {
+			return fmt.Errorf("cdp: method is required")
+		}
+		var params any
+		if len(a.Params) > 0 {
+			if err := json.Unmarshal(a.Params, &params); err != nil {
+				return fmt.Errorf("cdp: invalid params: %w", err)
+			}
+		}
+		callCtx := ctx
+		if a.TimeoutS > 0 {
+			var cancel context.CancelFunc
+			callCtx, cancel = context.WithTimeout(ctx, time.Duration(a.TimeoutS*float64(time.Second)))
+			defer cancel()
+		}
+		started := time.Now()
+		raw, err := s.Call(callCtx, a.Method, params)
+		elapsed := time.Since(started).Milliseconds()
+		if err != nil {
+			return fmt.Errorf("%s: no answer after %d ms: %w", a.Method, elapsed, err)
+		}
+		var result any
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &result); err != nil {
+				return fmt.Errorf("cdp: invalid result: %w", err)
+			}
+		}
+		return out.WriteSuccess(os.Stdout, false, "browser.cdp", map[string]any{"method": a.Method, "elapsed_ms": elapsed, "result": result})
+
+	case "events":
+		events := []map[string]any{}
+		for _, e := range s.Client.DrainEvents(a.Methods, a.Clear) {
+			if e.SessionID != "" && e.SessionID != s.SessionID {
+				continue
+			}
+			events = append(events, map[string]any{"method": e.Method, "at": e.At.UTC().Format(time.RFC3339Nano), "params": e.Params})
+		}
+		return out.WriteSuccess(os.Stdout, false, "browser.events", map[string]any{"count": len(events), "events": events})
 
 	case "close":
 		return s.Detach(ctx)
