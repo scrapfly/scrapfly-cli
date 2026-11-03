@@ -341,7 +341,8 @@ func downloadBundle(host, apiKey, os, arch string, insecure bool, timeout time.D
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("download bundle: %w", err)
+		// The error prints the request URL, api_key included.
+		return nil, "", fmt.Errorf("download bundle: %s", strings.ReplaceAll(err.Error(), apiKey, "REDACTED"))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

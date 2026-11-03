@@ -55,6 +55,12 @@ These flags behave this way from the CLI release after 0.4.1. On 0.4.1 and
 earlier, `--unblocker` and `--asp` send `asp=true`, and
 `--proxy-pool unblocker_ultra` or `--proxy-pool auto` selects that pool.
 
+### API key kept out of errors
+
+- A network error or a timeout no longer prints the API key: the request URL it
+  shows reads `key=REDACTED` (and `api_key=REDACTED` for the exit peer bundle
+  download).
+
 ### Crawl prompt and extract
 
 - `crawl prompt --no-stream` asks for the whole answer in one `crawl.prompt`
