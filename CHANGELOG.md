@@ -55,6 +55,15 @@ These flags behave this way from the CLI release after 0.4.1. On 0.4.1 and
 earlier, `--unblocker` and `--asp` send `asp=true`, and
 `--proxy-pool unblocker_ultra` or `--proxy-pool auto` selects that pool.
 
+### Crawl prompt and extract
+
+- `crawl prompt --no-stream` asks for the whole answer in one `crawl.prompt`
+  envelope (`generation.stream: false`) instead of a token stream.
+- `crawl extract` returns an object shaped by a JSON Schema (`--schema`, or
+  `--schema-file`, `-` for stdin), built from one or more crawls started with
+  `--search`. The schema constrains the model as it generates and is not
+  validated again: validate anything you act on.
+
 ### `scrape batch` correlation IDs
 
 - A JSONL line's `correlation_id` key is read, which was silently dropped

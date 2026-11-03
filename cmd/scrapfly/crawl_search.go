@@ -147,11 +147,12 @@ func printCrawlSearch(res *scrapfly.CrawlerSearchResponse) {
 
 func newCrawlPromptCmd(flags *rootFlags) *cobra.Command {
 	var (
-		prompt  string
-		model   string
-		limit   int
-		mode    string
-		filters []string
+		prompt   string
+		model    string
+		limit    int
+		mode     string
+		filters  []string
+		noStream bool
 	)
 	cmd := &cobra.Command{
 		Use:   "prompt <uuid...>",
@@ -162,11 +163,13 @@ answer over the retrieved chunks. Requires crawls started with --search.
 Tokens print to stdout as they arrive. In JSON mode (the default) the answer
 and its sources are emitted as one envelope once the stream completes, so the
 output stays parseable; use --pretty to see the sources and a live token
-stream instead.
+stream instead. --no-stream asks the API for the whole answer in one object,
+which adds how much of the corpus the answer covers (completeness, skipped).
 
 The request runs a fan-out and a generation, both billable, so it is never
 retried.`,
 		Example: `  scrapfly crawl prompt 01HX7K4... --prompt "What does this site sell?"
+  scrapfly crawl prompt 01HX7K4... --prompt "What does this site sell?" --no-stream
   scrapfly crawl prompt 01HX7K4... 01HX7M9... --prompt "Compare the pricing models" --pretty
   scrapfly crawl prompt 01HX7K4... --prompt "Summarize the docs" --model gemini-2.5-flash`,
 		Args: cobra.MinimumNArgs(1),
@@ -183,13 +186,24 @@ retried.`,
 				return err
 			}
 
-			opts := &scrapfly.CrawlPromptOptions{Model: model}
-			if limit != 0 || mode != "" || parsed != nil {
-				opts.Search = &scrapfly.CrawlSearchOptions{
-					Limit:   limit,
-					Mode:    scrapfly.CrawlerSearchMode(mode),
-					Filters: parsed,
+			opts := &scrapfly.CrawlPromptOptions{Model: model, Search: retrievalOptions(limit, mode, parsed)}
+
+			if noStream {
+				res, err := client.CrawlsPromptAnswer(args, prompt, opts)
+				if err != nil {
+					return err
 				}
+				if flags.pretty {
+					for _, source := range res.Sources {
+						out.Pretty(os.Stdout, "[%d] %s", source.ID, sanitizeTerminal(source.URL))
+					}
+					out.Pretty(os.Stdout, "%s", sanitizeTerminal(res.Answer))
+					out.Pretty(os.Stdout, "")
+					out.Pretty(os.Stdout, "sources_used=%v sources_dropped=%d truncated=%v api_credit=%s completeness=%s skipped=%d",
+						res.SourcesUsed, res.SourcesDropped, res.Truncated, formatAPICredit(res.APICredit), res.Search.Completeness, len(res.Search.Skipped))
+					return nil
+				}
+				return out.WriteSuccess(os.Stdout, false, "crawl.prompt", res)
 			}
 
 			var (
@@ -228,10 +242,7 @@ retried.`,
 			// api_credit is what the run was actually charged. An engine too old
 			// to report it sends no key, and that is not the same fact as a
 			// zero charge, so it is reported as unknown rather than as 0.
-			apiCredit := "unknown"
-			if done.APICredit != nil {
-				apiCredit = strconv.Itoa(*done.APICredit)
-			}
+			apiCredit := formatAPICredit(done.APICredit)
 
 			if flags.pretty {
 				out.Pretty(os.Stdout, "")
@@ -255,5 +266,99 @@ retried.`,
 	cmd.Flags().IntVar(&limit, "limit", 0, "retrieval: max chunks, 1-50 (0 = server default)")
 	cmd.Flags().StringVar(&mode, "mode", "", "retrieval: vector|fts|hybrid (empty = server default hybrid)")
 	cmd.Flags().StringArrayVar(&filters, "filter", nil, "retrieval: key=value filter (repeatable), same keys as crawl search")
+	cmd.Flags().BoolVar(&noStream, "no-stream", false, "ask for the whole answer in one object instead of a token stream")
 	return cmd
+}
+
+func newCrawlExtractCmd(flags *rootFlags) *cobra.Command {
+	var (
+		prompt     string
+		schema     string
+		schemaFile string
+		limit      int
+		mode       string
+		filters    []string
+	)
+	cmd := &cobra.Command{
+		Use:   "extract <uuid...>",
+		Short: "Extract a structured object from the content of one or more crawls",
+		Long: `Retrieves like ` + "`crawl prompt`" + ` and answers with an object shaped by a JSON
+Schema, handed to the model as its response schema. Requires crawls started
+with --search. There is no streaming variant.
+
+The schema constrains the model as it generates; it is not validated again
+afterwards, so validate anything you act on.
+
+The request runs a fan-out and a generation, so it is never retried.`,
+		Example: `  scrapfly crawl extract 01HX7K4... --prompt "Every product with its price" \
+      --schema '{"type":"object","properties":{"products":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"price":{"type":"number"}}}}},"required":["products"]}'
+  scrapfly crawl extract 01HX7K4... --prompt "Every plan with its monthly price" --schema-file plans.schema.json --pretty`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if prompt == "" {
+				return fmt.Errorf("%w: --prompt is required", scrapfly.ErrCrawlerConfig)
+			}
+			if (schema == "") == (schemaFile == "") {
+				return fmt.Errorf("%w: give the JSON Schema with exactly one of --schema and --schema-file", scrapfly.ErrCrawlerConfig)
+			}
+			raw := []byte(schema)
+			if schemaFile != "" {
+				var err error
+				if raw, err = readFileOrStdin(schemaFile); err != nil {
+					return fmt.Errorf("--schema-file: %w", err)
+				}
+			}
+			var parsedSchema map[string]interface{}
+			if err := json.Unmarshal(raw, &parsedSchema); err != nil {
+				return fmt.Errorf("%w: the schema is not a JSON object: %v", scrapfly.ErrCrawlerConfig, err)
+			}
+			parsed, err := parseSearchFilters(filters)
+			if err != nil {
+				return fmt.Errorf("--filter: %w", err)
+			}
+			client, err := buildClient(flags)
+			if err != nil {
+				return err
+			}
+
+			res, err := client.CrawlsExtract(args, prompt, parsedSchema, &scrapfly.CrawlExtractOptions{Search: retrievalOptions(limit, mode, parsed)})
+			if err != nil {
+				return err
+			}
+
+			if flags.pretty {
+				indented, _ := json.MarshalIndent(res.Data, "", "  ")
+				out.Pretty(os.Stdout, "%s", sanitizeTerminal(string(indented)))
+				out.Pretty(os.Stdout, "")
+				out.Pretty(os.Stdout, "sources=%d sources_dropped=%d truncated=%v completeness=%s skipped=%d",
+					len(res.Sources), res.SourcesDropped, res.Truncated, res.Search.Completeness, len(res.Search.Skipped))
+				return nil
+			}
+			return out.WriteSuccess(os.Stdout, false, "crawl.extract", res)
+		},
+	}
+	cmd.Flags().StringVar(&prompt, "prompt", "", "what to extract (required)")
+	cmd.Flags().StringVar(&schema, "schema", "", "JSON Schema of the result, inline")
+	cmd.Flags().StringVar(&schemaFile, "schema-file", "", "file holding the JSON Schema of the result (- for stdin)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "retrieval: max chunks, 1-50 (0 = server default)")
+	cmd.Flags().StringVar(&mode, "mode", "", "retrieval: vector|fts|hybrid (empty = server default hybrid)")
+	cmd.Flags().StringArrayVar(&filters, "filter", nil, "retrieval: key=value filter (repeatable), same keys as crawl search")
+	return cmd
+}
+
+// retrievalOptions builds the search block of a prompt or an extraction, nil when every flag is left at its default.
+func retrievalOptions(limit int, mode string, filters map[string]interface{}) *scrapfly.CrawlSearchOptions {
+	if limit == 0 && mode == "" && filters == nil {
+		return nil
+	}
+	return &scrapfly.CrawlSearchOptions{Limit: limit, Mode: scrapfly.CrawlerSearchMode(mode), Filters: filters}
+}
+
+// formatAPICredit reports what a prompt was charged. An engine too old to
+// report it sends no key, and that is not the same fact as a zero charge.
+func formatAPICredit(credit *int) string {
+	if credit == nil {
+		return "unknown"
+	}
+	return strconv.Itoa(*credit)
 }

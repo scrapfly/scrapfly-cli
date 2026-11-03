@@ -28,6 +28,7 @@ Subcommands:
   cancel <uuid>     stop a running crawl
   search <uuid...>  semantic search over one or more crawls (needs --search at start)
   prompt <uuid...>  ask a question answered from one or more crawls
+  extract <uuid...> pull an object shaped by a JSON Schema out of one or more crawls
   refresh <uuid>    re-scrape a crawl in place now, or change its refresh schedule
   refresh-history <uuid>  the crawl's refresh timeline`,
 		Example: `  # Full synchronous crawl, markdown content
@@ -45,9 +46,11 @@ Subcommands:
 
   # Index the crawl, then search and ask across it
   UUID=$(scrapfly crawl run https://example.com --max-pages 20 --search \
-    --content-format markdown | jq -r .data.crawler_uuid)
+    --content-format markdown | jq -r .data.uuid)
   scrapfly crawl search "$UUID" --query "pricing" --limit 5
   scrapfly crawl prompt "$UUID" --prompt "What does this site sell?"
+  scrapfly crawl extract "$UUID" --prompt "Every plan with its monthly price" \
+    --schema-file plans.schema.json
 
   # Keep the crawl fresh: re-scrape it daily, in place, under the same UUID
   scrapfly crawl refresh "$UUID" --enable --interval 86400
@@ -65,6 +68,7 @@ Subcommands:
 	cmd.AddCommand(newCrawlWatchCmd(flags))
 	cmd.AddCommand(newCrawlSearchCmd(flags))
 	cmd.AddCommand(newCrawlPromptCmd(flags))
+	cmd.AddCommand(newCrawlExtractCmd(flags))
 	cmd.AddCommand(newCrawlRefreshCmd(flags))
 	cmd.AddCommand(newCrawlRefreshHistoryCmd(flags))
 	return cmd
