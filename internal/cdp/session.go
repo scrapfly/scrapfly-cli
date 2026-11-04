@@ -64,6 +64,19 @@ func Attach(ctx context.Context, c *Client) (*Session, error) {
 	return s, nil
 }
 
+// AttachAt attaches like Attach, then opens url when one is given.
+func AttachAt(ctx context.Context, c *Client, url string) (*Session, error) {
+	s, err := Attach(ctx, c)
+	if err != nil || url == "" {
+		return s, err
+	}
+	if _, err := s.Open(ctx, url); err != nil {
+		_ = s.Detach(context.Background())
+		return nil, fmt.Errorf("open %s: %w", url, err)
+	}
+	return s, nil
+}
+
 // Call proxies a CDP call scoped to this session.
 func (s *Session) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	return s.Client.Call(ctx, method, params, s.SessionID)

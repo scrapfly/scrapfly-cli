@@ -79,7 +79,7 @@ what an action reports:
 
 Inputs (mutually exclusive):
   --ws <url>        connect to an existing CDP WebSocket
-  --url <url>       call /unblock first, then attach (--unblock for alias)
+  --url <url>       call /unblock first, then attach and open it (--unblock for alias)
   (neither)         build a new CDP URL from browser flags, attach lazily
 
 Driver modes:
@@ -153,7 +153,7 @@ envelope.`,
 				runID = cdpClient.RunID()
 			}
 
-			sess, err := cdp.Attach(ctx, cdpClient)
+			sess, err := cdp.AttachAt(ctx, cdpClient, targetURL)
 			if err != nil {
 				return err
 			}
@@ -210,7 +210,7 @@ envelope.`,
 	}
 
 	cmd.Flags().StringVar(&wsURL, "ws", "", "connect to an existing CDP WebSocket URL")
-	cmd.Flags().StringVar(&targetURL, "url", "", "call /unblock on this URL, then attach")
+	cmd.Flags().StringVar(&targetURL, "url", "", "call /unblock on this URL, then attach and open it")
 	cmd.Flags().BoolVar(&unblock, "unblock", false, "alias: pre-navigate via /unblock (requires --url)")
 	cmd.Flags().StringVar(&scriptPath, "script", "", "execute actions from a .jsonl file (one action per line)")
 	cmd.Flags().BoolVar(&keepOpen, "keep-open", false, "don't close the tab when execute exits")

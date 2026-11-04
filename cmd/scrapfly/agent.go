@@ -43,8 +43,8 @@ type agentRuntime struct {
 	onReconnect func() // called after a successful reconnect (for defer cleanup)
 }
 
-// reconnect tears down the current CDP client/session and attaches to wsURL.
-func (r *agentRuntime) reconnect(wsURL string) error {
+// reconnect tears down the current CDP client/session, attaches to wsURL and opens url.
+func (r *agentRuntime) reconnect(wsURL, url string) error {
 	if r.sess != nil {
 		_ = r.sess.Detach(context.Background())
 	}
@@ -56,7 +56,7 @@ func (r *agentRuntime) reconnect(wsURL string) error {
 		return fmt.Errorf("reconnect dial: %w", err)
 	}
 	r.cdpClient = nc
-	ns, err := cdp.Attach(r.ctx, nc)
+	ns, err := cdp.AttachAt(r.ctx, nc, url)
 	if err != nil {
 		return fmt.Errorf("reconnect attach: %w", err)
 	}
@@ -218,7 +218,7 @@ traces go to stderr when --verbose is set.`,
 			if err != nil {
 				return err
 			}
-			sess, err := cdp.Attach(ctx, cdpClient)
+			sess, err := cdp.AttachAt(ctx, cdpClient, targetURL)
 			if err != nil {
 				_ = cdpClient.Close()
 				return err
@@ -351,7 +351,7 @@ traces go to stderr when --verbose is set.`,
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "stream per-step traces to stderr")
 
 	cmd.Flags().StringVar(&wsURL, "ws", "", "connect to an existing CDP WebSocket URL")
-	cmd.Flags().StringVar(&targetURL, "url", "", "call /unblock on this URL, then attach")
+	cmd.Flags().StringVar(&targetURL, "url", "", "call /unblock on this URL, then attach and open it")
 	cmd.Flags().BoolVar(&keepOpen, "keep-open", false, "don't close the tab when agent exits")
 	bindBrowserLaunchFlags(cmd, &launchArgs)
 	cmd.Flags().StringVar(&launchArgs.session, "session", "", "browser session id (pin for reuse across runs)")
@@ -460,13 +460,13 @@ func runAgentTool(rt *agentRuntime, tc llm.ToolCall) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("unblock: %w", err)
 		}
-		if err := rt.reconnect(res.WSURL); err != nil {
+		if err := rt.reconnect(res.WSURL, args.URL); err != nil {
 			return "", err
 		}
 		return jsonStr(map[string]any{
 			"session_id": res.SessionID,
 			"run_id":     res.RunID,
-			"status":     "reconnected — take a new snapshot",
+			"status":     "reconnected on " + args.URL + " — take a new snapshot",
 		}), nil
 	case "find_selector":
 		var fsargs struct {

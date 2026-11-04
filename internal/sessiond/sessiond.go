@@ -117,7 +117,7 @@ func stripVaultKey(wsURL string) string {
 }
 
 // Serve runs the daemon until ctx is cancelled or a SIGINT/SIGTERM is
-// received. It attaches to wsURL, writes <sessionID>.json + .sock under
+// received. It attaches to wsURL, opens startURL when one is given, writes <sessionID>.json + .sock under
 // ~/.scrapfly/sessions/, serves requests, and cleans up on exit.
 //
 // The daemon is foreground: the caller is responsible for backgrounding
@@ -131,7 +131,7 @@ func stripVaultKey(wsURL string) string {
 // budget is the caller's --timeout rather than a private constant: an operator
 // hitting a cold pool can raise it. Zero or negative bounds the dial by ctx
 // alone.
-func Serve(ctx context.Context, sessionID, wsURL string, dialBudget time.Duration, onReady func(sock, runID string)) error {
+func Serve(ctx context.Context, sessionID, wsURL, startURL string, dialBudget time.Duration, onReady func(sock, runID string)) error {
 	sockPath, metaPath, err := PathsFor(sessionID)
 	if err != nil {
 		return err
@@ -173,7 +173,7 @@ func Serve(ctx context.Context, sessionID, wsURL string, dialBudget time.Duratio
 		return fmt.Errorf("cdp dial: %w", err)
 	}
 	defer client.Close()
-	sess, err := cdp.Attach(dialCtx, client)
+	sess, err := cdp.AttachAt(dialCtx, client, startURL)
 	if err != nil {
 		return fmt.Errorf("cdp attach: %w", err)
 	}
