@@ -123,7 +123,7 @@ func TestWebBaseForHost(t *testing.T) {
 		"https://api.scrapfly.io/": "https://scrapfly.io",
 		"https://api.example.test": "https://example.test",
 		// Already a base domain (self-hosted stack): left alone.
-		"https://scrapfly.internal:8443": "https://scrapfly.internal:8443",
+		"https://scrapfly.example.test:8443": "https://scrapfly.example.test:8443",
 	}
 	for host, want := range cases {
 		if got := webBaseForHost(host); got != want {
