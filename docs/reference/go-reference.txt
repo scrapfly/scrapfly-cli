@@ -56,6 +56,15 @@ func (c *Client) Close() error
     Close closes the underlying WebSocket. Any pending Call returns the close
     error.
 
+func (c *Client) Closed() error
+    Closed is why the connection ended, nil while it is open: a browser the
+    remote side stopped leaves the client in place with every call failing.
+
+func (c *Client) DrainEvents(methods []string, clear bool) []*Message
+    DrainEvents returns the buffered events of the given methods (every one when
+    none is given), oldest first, and removes them from the buffer when clear is
+    set. The buffer keeps the last 256 events.
+
 func (c *Client) RunID() string
     RunID returns the Scrapfly run id advertised on the upgrade response,
     or "" when the peer is not a Scrapfly endpoint.
@@ -71,6 +80,10 @@ type Message struct {
 	Result    json.RawMessage `json:"result,omitempty"`
 	Error     *RPCError       `json:"error,omitempty"`
 	SessionID string          `json:"sessionId,omitempty"`
+
+	// At is when readLoop received an event: the wire carries no clock, and the
+	// order and spacing of events is what a protocol-level check reads.
+	At time.Time `json:"-"`
 }
     Message is the on-wire envelope for both calls and events. Responses carry
     ID + Result (or Error). Events carry Method + Params (no ID).
@@ -411,6 +424,18 @@ type EnvelopeError struct {
 	Retryable         bool     `json:"retryable,omitempty"`
 	AvailableProducts []string `json:"available_products,omitempty"`
 }
+
+type HintedError struct {
+	Err  error
+	Hint string
+}
+    HintedError adds the CLI's own next step to an error. The envelope takes its
+    code and message from the wrapped error as if unwrapped, and carries Hint
+    after any hint of its own.
+
+func (e *HintedError) Error() string
+
+func (e *HintedError) Unwrap() error
 
 
 === github.com/scrapfly/scrapfly-cli/internal/sessiond ===

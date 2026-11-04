@@ -164,17 +164,19 @@ func newBrowserStatusCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("no metadata for session %q (never started?): %w", sid, err)
 			}
-			alive := true
-			if _, err := sessiond.Send(sid, sessiond.Request{Action: "ping"}); err != nil {
-				alive = false
-			}
-			return out.WriteSuccess(os.Stdout, flags.pretty, "browser.status", map[string]any{
+			status := map[string]any{
 				"session_id": meta.SessionID,
 				"ws_url":     meta.WSURL,
 				"pid":        meta.PID,
 				"started_at": meta.StartedAt,
-				"alive":      alive,
-			})
+				"alive":      true,
+			}
+			// the daemon can outlive its browser: a session the remote side stopped answers ping with why
+			if _, err := sessiond.Send(sid, sessiond.Request{Action: "ping"}); err != nil {
+				status["alive"] = false
+				status["error"] = err.Error()
+			}
+			return out.WriteSuccess(os.Stdout, flags.pretty, "browser.status", status)
 		},
 	}
 }

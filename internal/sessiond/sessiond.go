@@ -379,6 +379,9 @@ func dispatch(ctx context.Context, s *cdp.Session, r *Request, shutdown func()) 
 		// Diagnostic: return the current ref table.
 		return marshal(s.RefTable)
 	case "ping":
+		if err := s.Client.Closed(); err != nil {
+			return nil, err
+		}
 		return marshal(map[string]string{"status": "alive"})
 	case "shutdown":
 		// The client wants the daemon to exit. We succeed the request, then

@@ -96,6 +96,17 @@ func (c *Client) closeErr() error {
 	return connClosed(c.err)
 }
 
+// Closed is why the connection ended, nil while it is open: a browser the
+// remote side stopped leaves the client in place with every call failing.
+func (c *Client) Closed() error {
+	select {
+	case <-c.doneCh:
+		return c.closeErr()
+	default:
+		return nil
+	}
+}
+
 // Dial connects to a CDP WebSocket URL (typically wss://browser.scrapfly.io/
 // ?api_key=...). Pass a derived ctx for dial cancellation.
 func Dial(ctx context.Context, wsURL string) (*Client, error) {
