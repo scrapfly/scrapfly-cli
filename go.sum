@@ -71,10 +71,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/scrapfly/go-scrapfly v1.5.1-0.20261103092809-a5ad717ca6d2 h1:89bf3kaYTDLS/0uNId9Aiqk9Ef9LG1T4pnokfCTjXHI=
-github.com/scrapfly/go-scrapfly v1.5.1-0.20261103092809-a5ad717ca6d2/go.mod h1:D45vQf6CBemOliJehxwnU2iL4EQfry2wWPwn83cGO54=
-github.com/scrapfly/go-scrapfly v1.5.1-0.20261105171105-e6ff35af432c h1:rDJsdPmSzSXckQrI5Cnc3SLovYfZaMb3zM+YxcDHkHI=
-github.com/scrapfly/go-scrapfly v1.5.1-0.20261105171105-e6ff35af432c/go.mod h1:D45vQf6CBemOliJehxwnU2iL4EQfry2wWPwn83cGO54=
+github.com/scrapfly/go-scrapfly v1.5.1-0.20261107082836-ec5bfc6bc938 h1:+xXnwFl8LBu0sfGgRD7/OYS0AmdD2E3oK6fUIE8Obtc=
+github.com/scrapfly/go-scrapfly v1.5.1-0.20261107082836-ec5bfc6bc938/go.mod h1:D45vQf6CBemOliJehxwnU2iL4EQfry2wWPwn83cGO54=
 github.com/segmentio/asm v1.1.3 h1:WM03sfUOENvvKexOLp+pCqgb/WDjsi7EK8gIsICtzhc=
 github.com/segmentio/asm v1.1.3/go.mod h1:Ld3L4ZXGNcSLRg4JBsZ3//1+f/TjYl0Mzen/DQy1EJg=
 github.com/segmentio/encoding v0.5.4 h1:OW1VRern8Nw6ITAtwSZ7Idrl3MXCFwXHPgqESYfvNt0=

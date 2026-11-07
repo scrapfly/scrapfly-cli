@@ -84,6 +84,17 @@ Without either, the image is returned base64-encoded inside the JSON envelope.`,
 			if err != nil {
 				return err
 			}
+			// A screenshot with a webhook answers its job: the image goes to the webhook.
+			if result.JobUUID != "" {
+				if flags.pretty {
+					out.Pretty(os.Stdout, "queued for webhook %s, job %s", webhook, result.JobUUID)
+					return nil
+				}
+				return out.WriteSuccess(os.Stdout, false, "screenshot", map[string]any{
+					"webhook_enqueued": true,
+					"job_uuid":         result.JobUUID,
+				})
+			}
 
 			dst, err := resolveOutputPath(flags, args[0], result.Metadata.ExtensionName)
 			if err != nil {
