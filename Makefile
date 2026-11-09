@@ -31,22 +31,18 @@ dev:
 	go build -trimpath -o dist/$(BIN) $(PKG)
 
 # dev-local builds dist/$(BIN) against the local working-tree
-# go-scrapfly SDK, then restores go.mod to its release state so
-# the repo stays clean for downstream `make release` / CI runs.
+# go-scrapfly SDK, then puts go.mod and go.sum back byte for byte,
+# whether the build succeeds, fails or is interrupted.
 dev-local:
-	@mkdir -p dist
-	@# Refuse before editing go.mod: a missing checkout fails `go mod tidy`
-	@# mid-recipe, which skips the restore below and leaves go.mod dirty with a
-	@# replace directive that check-no-replace then rejects at release time.
 	@[ -f "$(SDK_LOCAL)/go.mod" ] || { echo "dev-local: no go.mod under $(SDK_LOCAL); pass SDK_LOCAL=/path/to/go-scrapfly"; exit 2; }
+	@! grep -qE 'github\.com/scrapfly/go-scrapfly( +v[^ ]+)? +=>' go.mod || { echo "dev-local: go.mod already replaces go-scrapfly; drop it with go mod edit -dropreplace=github.com/scrapfly/go-scrapfly (a run that did not finish left go.mod and go.sum as they were in dist/.dev-local/)"; exit 2; }
 	@echo "[dev-local] replacing go-scrapfly -> $(SDK_LOCAL)"
-	go mod edit -replace=github.com/scrapfly/go-scrapfly=$(SDK_LOCAL)
-	go mod tidy
-	$(MAKE) _dev-local-build; status=$$?; \
-	echo "[dev-local] dropping replace directive"; \
-	go mod edit -dropreplace=github.com/scrapfly/go-scrapfly; \
-	go mod tidy; \
-	exit $$status
+	@mkdir -p dist/.dev-local && cp go.mod go.sum dist/.dev-local/ && \
+	trap 'cp dist/.dev-local/go.mod dist/.dev-local/go.sum . && echo "[dev-local] go.mod and go.sum restored"' EXIT && \
+	trap 'exit 130' HUP INT TERM && \
+	go mod edit -replace=github.com/scrapfly/go-scrapfly=$(SDK_LOCAL) && \
+	go mod tidy && \
+	$(MAKE) _dev-local-build
 
 _dev-local-build:
 	go build -trimpath -o dist/$(BIN) $(PKG)
