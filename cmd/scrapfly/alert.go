@@ -45,7 +45,7 @@ func newAlertListCmd(flags *rootFlags) *cobra.Command {
 	var state, projectUUID, metric string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List alert definitions for the calling account",
+		Short: "List the alert definitions of the API key's project",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := buildClient(flags)
 			if err != nil {
@@ -63,7 +63,7 @@ func newAlertListCmd(flags *rootFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&state, "state", "", "filter by state: ok|pending|triggered|recovering|no_data|snoozed")
-	cmd.Flags().StringVar(&projectUUID, "project-uuid", "", "filter by project UUID")
+	cmd.Flags().StringVar(&projectUUID, "project-uuid", "", "the API key's project UUID (another project lists none)")
 	cmd.Flags().StringVar(&metric, "metric", "", "filter by metric_id")
 	return cmd
 }
@@ -110,7 +110,7 @@ func newAlertCountActiveCmd(flags *rootFlags) *cobra.Command {
 			return out.WriteSuccess(os.Stdout, flags.pretty, "alert", res)
 		},
 	}
-	cmd.Flags().StringVar(&projectUUID, "project-uuid", "", "restrict to a single project UUID")
+	cmd.Flags().StringVar(&projectUUID, "project-uuid", "", "the API key's project UUID (another project counts none)")
 	return cmd
 }
 
@@ -200,7 +200,7 @@ disk — flags override file fields when both are present.`,
 	}
 	cmd.Flags().StringVar(&name, "name", "", "alert name")
 	cmd.Flags().StringVar(&description, "description", "", "alert description")
-	cmd.Flags().StringVar(&projectUUID, "project-uuid", "", "project UUID (default: caller's current)")
+	cmd.Flags().StringVar(&projectUUID, "project-uuid", "", "project UUID: the API key's project, the only one a key creates in (default)")
 	cmd.Flags().StringVar(&metric, "metric", "", "metric_id (see `scrapfly alert metric-families`)")
 	cmd.Flags().StringVar(&comparator, "comparator", "", "threshold comparator: gt|lt|gte|lte|eq|neq")
 	cmd.Flags().Float64Var(&threshold, "threshold", 0, "threshold value")
