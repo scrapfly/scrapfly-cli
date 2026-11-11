@@ -19,8 +19,8 @@ func newScheduleCmd(flags *rootFlags) *cobra.Command {
 		Long: `Manage schedules across the Web Scraping, Screenshot and Crawler APIs.
 
 Use this top-level group for cross-kind operations (list the schedules of
-the API key's project, get/update/cancel/pause/resume/execute by id
-regardless of kind). The per-product subcommands (scrapfly scrape schedule create …,
+the API key's project and environment, get/update/cancel/pause/resume/execute
+by id regardless of kind). The per-product subcommands (scrapfly scrape schedule create …,
 scrapfly screenshot schedule create …, scrapfly crawl schedule create …)
 are used to create new schedules , each takes the matching config payload.`,
 	}
@@ -157,7 +157,7 @@ func newScheduleListCmd(flags *rootFlags, internalKind string) *cobra.Command {
 	var status string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List the schedules of the API key's project",
+		Short: "List the schedules of the API key's project and environment",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := buildClient(flags)
 			if err != nil {
