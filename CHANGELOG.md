@@ -42,6 +42,9 @@
   API's error.
 - A Screenshot API answer in JSON is reported as an error; 0.4.1 saved it as
   the image.
+- `crawl contents --url` without `--plain` prints the page's content under
+  `contents.<url>`, one key per format; 0.4.1 failed with `crawler contents
+  response missing required field "contents"`.
 
 ### Proxy pools
 
