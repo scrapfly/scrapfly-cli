@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	scrapfly "github.com/scrapfly/go-scrapfly"
+	"github.com/scrapfly/scrapfly-cli/internal/cdp"
 	"github.com/scrapfly/scrapfly-cli/internal/out"
 	"github.com/scrapfly/scrapfly-cli/internal/sessiond"
 	"github.com/spf13/cobra"
@@ -320,9 +321,7 @@ func vncConnectInfo(wsURL, salt, rawPassword, runID string) (connectURL, passwor
 }
 
 // wsURLSecretParams are the CDP URL query params that carry a credential.
-// api_key was always there; the vault key and the HITL passwords joined it when
-// those flags landed.
-var wsURLSecretParams = []string{"api_key", "key", "vault_key", "vnc_password", "rtc_password"}
+var wsURLSecretParams = cdp.URLSecretParams
 
 // redactWSURL masks credential params for human-facing output, so they do not
 // land in terminal scrollback or CI logs.

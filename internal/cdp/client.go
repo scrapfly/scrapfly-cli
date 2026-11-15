@@ -15,7 +15,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -107,12 +109,50 @@ func (c *Client) Closed() error {
 	}
 }
 
+// URLSecretParams are the CDP URL query params that carry a credential.
+var URLSecretParams = []string{"api_key", "key", "vault_key", "vnc_password", "rtc_password"}
+
+// dialError is a failed dial whose text holds no credential of the URL.
+type dialError struct {
+	msg string
+	err error
+}
+
+func (e *dialError) Error() string { return e.msg }
+func (e *dialError) Unwrap() error { return e.err }
+
+// newDialError masks the URLSecretParams values of wsURL in err's text, which
+// quotes the URL the handshake requested: each value as the URL spells it,
+// decoded, and as url.QueryEscape spells it.
+func newDialError(wsURL string, err error) error {
+	u, parseErr := url.Parse(wsURL)
+	if parseErr != nil {
+		return &dialError{msg: "cdp dial: the CDP URL could not be parsed", err: err}
+	}
+	msg := err.Error()
+	for _, pair := range strings.Split(u.RawQuery, "&") {
+		rawKey, rawValue, _ := strings.Cut(pair, "=")
+		key, keyErr := url.QueryUnescape(rawKey)
+		if keyErr != nil || !slices.Contains(URLSecretParams, key) || rawValue == "" {
+			continue
+		}
+		masked := []string{rawValue, url.QueryEscape(rawValue)}
+		if value, valueErr := url.QueryUnescape(rawValue); valueErr == nil && value != "" {
+			masked = append(masked, value, url.QueryEscape(value))
+		}
+		for _, m := range masked {
+			msg = strings.ReplaceAll(msg, m, "REDACTED")
+		}
+	}
+	return &dialError{msg: "cdp dial: " + msg, err: err}
+}
+
 // Dial connects to a CDP WebSocket URL (typically wss://browser.scrapfly.io/
 // ?api_key=...). Pass a derived ctx for dial cancellation.
 func Dial(ctx context.Context, wsURL string) (*Client, error) {
 	conn, resp, err := websocket.Dial(ctx, wsURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("cdp dial: %w", err)
+		return nil, newDialError(wsURL, err)
 	}
 	// CDP messages can be large (AXTree, screenshots). Disable the 32 KiB cap.
 	conn.SetReadLimit(64 * 1024 * 1024)
