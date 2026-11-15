@@ -425,18 +425,6 @@ type EnvelopeError struct {
 	AvailableProducts []string `json:"available_products,omitempty"`
 }
 
-type HintedError struct {
-	Err  error
-	Hint string
-}
-    HintedError adds the CLI's own next step to an error. The envelope takes its
-    code and message from the wrapped error as if unwrapped, and carries Hint
-    after any hint of its own.
-
-func (e *HintedError) Error() string
-
-func (e *HintedError) Unwrap() error
-
 
 === github.com/scrapfly/scrapfly-cli/internal/sessiond ===
 package sessiond // import "github.com/scrapfly/scrapfly-cli/internal/sessiond"

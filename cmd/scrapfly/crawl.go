@@ -143,7 +143,6 @@ func bindCrawlStartFlags(cmd *cobra.Command, f *crawlStartFlags) {
 }
 
 func buildCrawlerConfig(url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig, error) {
-	proxyPool, asp := f.pool.resolve()
 	cfg := &scrapfly.CrawlerConfig{
 		URL:                       url,
 		PageLimit:                 f.pageLimit,
@@ -168,8 +167,8 @@ func buildCrawlerConfig(url string, f *crawlStartFlags) (*scrapfly.CrawlerConfig
 		Search:                    f.search,
 		Refresh:                   f.refresh,
 		RefreshInterval:           f.refreshInterval,
-		ASP:                       asp, // SDK field frozen; wire key stays "asp"
-		ProxyPool:                 proxyPool,
+		ASP:                       f.pool.unblocker, // SDK field frozen; wire key stays "asp"
+		ProxyPool:                 f.pool.pool,
 		Country:                   f.country,
 		WebhookName:               f.webhookName,
 	}

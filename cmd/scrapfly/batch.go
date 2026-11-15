@@ -56,17 +56,11 @@ correlation_id are refused before anything is sent, as the API refuses them.
 
 A line's "proxy_pool", "asp" and "unblocker" keys mean what they mean to the
 API ("asp" wins over "unblocker" on the same line), and the flags fill in only
-what a line leaves out. A line naming "asp" or "unblocker" takes a pool word
-from the flags only when the word matches its value: basic with false;
-unblocker, unblocker_ultra or auto with true. The word then goes out in place
-of that key. A line refused with ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED that
-names its own proxy_pool takes "proxy_pool": "unblocker_ultra" on the line
-itself. "asp" and "unblocker" are deprecated: use "proxy_pool"
-(unblocker_ultra for the Unblocker). The migration guide covers requests
-written before the proxy pools: https://scrapfly.io/new-pricing#legacy-spellings
+what a line leaves out: --proxy-pool a line naming no "proxy_pool", and
+--unblocker a line naming neither "asp" nor "unblocker".
 
 ` + proxyPoolHelp,
-		Example: `  scrapfly scrape batch --url https://httpbin.dev/get?a=1 --url https://httpbin.dev/get?b=2 --unblocker-ultra
+		Example: `  scrapfly scrape batch --url https://httpbin.dev/get?a=1 --url https://httpbin.dev/get?b=2 --unblocker
   scrapfly scrape batch --url-file urls.txt --country us
   jq -c '.[]' configs.json | scrapfly scrape batch`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -75,7 +69,7 @@ written before the proxy pools: https://scrapfly.io/new-pricing#legacy-spellings
 				return err
 			}
 
-			configs, poolFromFlags, err := collectBatchConfigs(cmd.InOrStdin(), urls, urlFile, country, pool, renderJS)
+			configs, err := collectBatchConfigs(cmd.InOrStdin(), urls, urlFile, country, pool, renderJS)
 			if err != nil {
 				return err
 			}
@@ -96,31 +90,19 @@ written before the proxy pools: https://scrapfly.io/new-pricing#legacy-spellings
 				return err
 			}
 
-			hint := batchUltraRefusalHints(poolFromFlags, pool)
 			enc := json.NewEncoder(os.Stdout)
 			for item := range ch {
 				env := out.Envelope{Product: "batch"}
 				if item.Err != nil {
 					env.Success = false
 					env.Error = &out.EnvelopeError{Message: item.Err.Error()}
-					if isUltraRefusal(item.Err) {
-						env.Error.Hint = hint(item.CorrelationID)
-					}
 					env.Data = map[string]any{"correlation_id": item.CorrelationID}
 				} else {
 					env.Success = true
-					data := map[string]any{
+					env.Data = map[string]any{
 						"correlation_id": item.CorrelationID,
 						"result":         item.Result,
 					}
-					// A scrape the engine refused comes back as a result
-					// carrying the error, not as an error part.
-					if item.Result != nil && item.Result.Result.Error != nil && item.Result.Result.Error.Code == errUnblockerUltraRequired {
-						if h := hint(item.CorrelationID); h != "" {
-							data["hint"] = h
-						}
-					}
-					env.Data = data
 				}
 				if err := enc.Encode(env); err != nil {
 					return err
@@ -141,30 +123,22 @@ written before the proxy pools: https://scrapfly.io/new-pricing#legacy-spellings
 }
 
 // collectBatchConfigs builds the batch from --url and --url-file, or else from
-// JSONL on stdin. poolFromFlags holds, by correlation ID, whether a config's
-// proxy_pool came from the flags: always for a --url or --url-file entry,
-// for a JSONL line as resolveLine says. Results, hints and envelopes are
-// matched back by correlation ID, so every config leaves with one of its own.
+// JSONL on stdin, each config with a correlation ID of its own.
 func collectBatchConfigs(
 	stdin io.Reader,
 	urls []string,
 	urlFile, country string,
 	pool proxyPoolFlags,
 	renderJS bool,
-) (configs []*scrapfly.ScrapeConfig, poolFromFlags map[string]bool, err error) {
-	proxyPool, asp := pool.resolve()
-	// fromFlags[i] is configs[i]'s entry of poolFromFlags, keyed only once
-	// every correlation ID is known.
-	var fromFlags []bool
+) (configs []*scrapfly.ScrapeConfig, err error) {
 	addURL := func(u string) {
 		configs = append(configs, &scrapfly.ScrapeConfig{
 			URL:       u,
 			Country:   country,
-			ProxyPool: scrapfly.ProxyPool(proxyPool),
+			ProxyPool: scrapfly.ProxyPool(pool.pool),
 			RenderJS:  renderJS,
-			ASP:       asp, // SDK field frozen; wire key stays "asp"
+			ASP:       pool.unblocker, // SDK field frozen; wire key stays "asp"
 		})
-		fromFlags = append(fromFlags, true)
 	}
 
 	for _, u := range urls {
@@ -176,7 +150,7 @@ func collectBatchConfigs(
 	if urlFile != "" {
 		f, err := os.Open(urlFile)
 		if err != nil {
-			return nil, nil, fmt.Errorf("open --url-file %s: %w", urlFile, err)
+			return nil, fmt.Errorf("open --url-file %s: %w", urlFile, err)
 		}
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
@@ -188,7 +162,7 @@ func collectBatchConfigs(
 			addURL(line)
 		}
 		if err := scanner.Err(); err != nil {
-			return nil, nil, fmt.Errorf("read --url-file %s: %w", urlFile, err)
+			return nil, fmt.Errorf("read --url-file %s: %w", urlFile, err)
 		}
 	}
 
@@ -205,7 +179,7 @@ func collectBatchConfigs(
 			}
 			cfg, lineUnblocker, err := decodeBatchConfigLine([]byte(line))
 			if err != nil {
-				return nil, nil, fmt.Errorf("parse JSONL line: %w", err)
+				return nil, fmt.Errorf("parse JSONL line: %w", err)
 			}
 			if cfg.CorrelationID != "" {
 				idLines[cfg.CorrelationID] = append(idLines[cfg.CorrelationID], lineNo)
@@ -216,28 +190,22 @@ func collectBatchConfigs(
 			if !cfg.RenderJS {
 				cfg.RenderJS = renderJS
 			}
-			// A line that names either key decides the Unblocker for itself,
-			// false included; the flags are only a default.
-			linePool, lineASP, lineFromFlags := pool.resolveLine(string(cfg.ProxyPool), lineUnblocker)
+			// A line's own proxy_pool and asp/unblocker win, false included.
+			linePool, lineASP := pool.resolveLine(string(cfg.ProxyPool), lineUnblocker)
 			cfg.ProxyPool = scrapfly.ProxyPool(linePool)
 			cfg.ASP = lineASP
 			configs = append(configs, cfg)
-			fromFlags = append(fromFlags, lineFromFlags)
 		}
 		if err := scanner.Err(); err != nil {
-			return nil, nil, fmt.Errorf("read stdin JSONL: %w", err)
+			return nil, fmt.Errorf("read stdin JSONL: %w", err)
 		}
 		if err := reusedCorrelationIDs(idLines); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
 	assignBatchCorrelationIDs(configs)
-	poolFromFlags = make(map[string]bool, len(configs))
-	for i, cfg := range configs {
-		poolFromFlags[cfg.CorrelationID] = fromFlags[i]
-	}
-	return configs, poolFromFlags, nil
+	return configs, nil
 }
 
 // assignBatchCorrelationIDs gives each config without a correlation ID
@@ -295,21 +263,6 @@ func reusedCorrelationIDs(idLines map[string][]int) error {
 			id, strings.Join(nums[:len(nums)-1], ", "), nums[len(nums)-1])
 	}
 	return errors.New(strings.Join(msgs, "; ") + ": every config of a batch needs a correlation_id of its own")
-}
-
-// batchUltraRefusalHints returns, by correlation ID, the hint of a batch item
-// refused with ERR::PROXY::UNBLOCKER_ULTRA_REQUIRED: the flags' hint when the
-// item's pool came from the flags, else none. No flag changes the pool a JSONL
-// line named, even the one the flags send, and the API's message names the
-// pool to put on that line.
-func batchUltraRefusalHints(poolFromFlags map[string]bool, pool proxyPoolFlags) func(correlationID string) string {
-	hint := pool.ultraRefusalHint()
-	return func(correlationID string) string {
-		if poolFromFlags[correlationID] {
-			return hint
-		}
-		return ""
-	}
 }
 
 // decodeBatchConfigLine decodes one JSONL ScrapeConfig and returns, separately,

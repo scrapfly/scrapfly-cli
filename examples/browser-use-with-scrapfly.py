@@ -20,7 +20,7 @@ Run:
     python examples/browser-use-with-scrapfly.py
 
 What happens:
-    1. We shell out to `scrapfly browser ws ...` to mint a WSS URL.
+    1. We shell out to `scrapfly browser --pretty ...` to mint a WSS URL.
        (`--pretty` prints the bare URL; otherwise parse JSON.)
     2. We hand that URL to browser-use as a CDP endpoint.
     3. browser-use's agent navigates, reasons, clicks — all on the Scrapfly-
@@ -29,11 +29,12 @@ What happens:
 Notes
 -----
 * The WSS URL contains your API key — don't log it.
-* Use `--session <id>` on `scrapfly browser ws` to pin a stable session name
+* Use `--session <id>` on `scrapfly browser` to pin a stable session name
   so you can reconnect with the same cookies/state on the next run.
-* For a URL that needs an anti-bot warm-up, use `scrapfly browser launch <url>`
-  instead of `ws`; it returns {ws_url, session_id, run_id} after Scrapfly has
-  already navigated and bypassed protection.
+* For a URL that needs an anti-bot warm-up, run `scrapfly browser <url> --unblock`
+  (without --pretty) instead of mint_wss: it prints a JSON envelope whose data
+  holds ws_url, session_id and run_id, after Scrapfly has already navigated and
+  bypassed protection. Read ws_url from it.
 """
 
 import asyncio
@@ -47,8 +48,8 @@ from browser_use.llm import ChatOpenAI
 
 
 def mint_wss(*extra_args: str) -> str:
-    """Call `scrapfly browser ws` and return the raw wss:// URL."""
-    cmd = ["scrapfly", "browser", "ws", "--pretty", *extra_args]
+    """Call `scrapfly browser --pretty` and return the raw wss:// URL."""
+    cmd = ["scrapfly", "browser", "--pretty", *extra_args]
     out = subprocess.run(cmd, check=True, capture_output=True, text=True)
     url = out.stdout.strip()
     if not url.startswith("wss://") and not url.startswith("ws://"):
