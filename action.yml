@@ -30,8 +30,9 @@ runs:
         set -eu
         prefix=$(eval echo "${INPUT_PREFIX}")
         mkdir -p "$prefix"
-        # The hosted installer already handles os/arch detection and
-        # quarantine-bit stripping on macOS. Pin a version when provided.
+        # The hosted installer already handles os/arch detection and, on
+        # macOS, reports whether the binary is notarized. Pin a version when
+        # provided.
         args="--prefix $prefix"
         if [ -n "$INPUT_VERSION" ]; then
           args="$args --version $INPUT_VERSION"

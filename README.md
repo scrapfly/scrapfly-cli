@@ -58,7 +58,9 @@ Or grab a release tarball directly from
 follow `scrapfly-{os}-{arch}.tar.gz` (`scrapfly-windows-amd64.zip` on
 Windows). Supported: `darwin-universal`, `darwin-amd64`, `darwin-arm64`,
 `linux-amd64`, `linux-arm64`, `windows-amd64`. The macOS builds need macOS 13
-Ventura or later.
+Ventura or later; on macOS 12 Monterey, install v0.4.1, the last release for
+it (`--version v0.4.1`), and do not run `scrapfly update` there: 0.4.1 installs
+a release that does not start on macOS 12.
 
 From source (Go 1.27+):
 

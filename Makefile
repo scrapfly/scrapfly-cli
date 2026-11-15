@@ -1,9 +1,9 @@
 # Scrapfly CLI — release/dev Makefile.
 # Target names mirror the other official Scrapfly SDK repos for parity.
 #
-# Releases are goreleaser-driven (.goreleaser.yaml and
-# .goreleaser-linux-windows.yaml). `make release` tags + pushes; the
-# `release` GitHub Actions workflow publishes binaries.
+# Releases are goreleaser-driven (.goreleaser.yaml for macOS,
+# .goreleaser-linux.yaml and .goreleaser-windows.yaml). `make release` tags +
+# pushes; the `release` GitHub Actions workflow publishes binaries.
 
 VERSION ?=
 NEXT_VERSION ?=

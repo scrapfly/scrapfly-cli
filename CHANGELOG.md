@@ -1,6 +1,47 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+### Behavior change
+
+- macOS 13 Ventura or later: the binaries are built with Go 1.27 and do not
+  start on macOS 12 Monterey, which 0.4.1 supported. On macOS 12, stay on
+  0.4.1 and do not run `scrapfly update` from it, since 0.4.1 installs any
+  newer release. From this release on, the installer refuses the latest
+  release on macOS 12 (pass `--version v0.4.1` to it), the npm package refuses to
+  install 0.5.0 or later there (`npm install scrapfly-cli@0.4.1`), and
+  `scrapfly update` refuses a release whose binary needs a newer macOS than
+  the Mac runs, keeping the binary it has. Building from source needs Go 1.27
+  or later.
+- `scrape batch` reads a JSONL line's `proxy_pool` key, which 0.4.1 silently
+  dropped (only `ProxyPool` bound): a line carrying it now runs on that pool,
+  ahead of `--proxy-pool`.
+- `scrape batch` reads a JSONL line's `correlation_id` key, which 0.4.1
+  silently dropped (only `CorrelationID` bound): the line's result carries its
+  own ID rather than an `item-N`. Two lines naming the same `correlation_id`
+  are refused before anything is sent, with the ID and its stdin line numbers,
+  where 0.4.1 ignored the key and ran the batch. Give each line its own ID, or
+  drop the key.
+- `item-N` numbers a config by its position in the batch, one numbering across
+  `--url` and `--url-file`: a blank `--url` no longer uses up a number, which
+  let a `--url-file` line take the ID of a `--url` entry and got the batch
+  refused. A JSONL line without a `correlation_id` never takes an ID another
+  line names; it gets the first `item-N` past the end of the batch instead.
+- `scrape batch` sends a JSONL line's `Method` and `Body`; 0.4.1 sent every
+  line as a GET without its body.
+- `browser execute --url`, `agent --url` and `browser session start --url
+  --unblock` open the URL in the tab they attach to, waiting up to 15 seconds
+  for it to load; 0.4.1 left that tab blank. A URL the browser cannot open now
+  fails the command.
+- `browser status` reports `alive: false`, with `error`, once the session lost
+  its browser; 0.4.1 said `true` while the session process ran.
+- A request that timed out is no longer sent again: the retry started the
+  request over and waited out the deadline a second time.
+- A large scrape result (`clob` or `blob`) the API sends compressed is
+  decoded; 0.4.1 printed the compressed bytes. A failed fetch of it reports the
+  API's error.
+- A Screenshot API answer in JSON is reported as an error; 0.4.1 saved it as
+  the image.
 
 ### Proxy pools
 
@@ -11,8 +52,6 @@
   `public_datacenter_pool` (the default), `public_residential_pool`,
   `public_tor_pool` or a pool of your own.
 - The MCP `scrape` and `crawl_run` tools take `proxy_pool`, sent as given.
-- `scrape batch` reads a JSONL line's `proxy_pool` key, which was silently
-  dropped (only `ProxyPool` bound), so a line's own pool now applies.
 - `browser --proxy-pool` names the Cloud Browser pools: `datacenter`,
   `residential`, `tor` or `byop`.
 
@@ -20,7 +59,9 @@
 
 - A network error or a timeout no longer prints the API key: the request URL it
   shows reads `key=REDACTED` (and `api_key=REDACTED` for the exit peer bundle
-  download).
+  download). A Cloud Browser connection that fails (`browser`, `agent`, a
+  browser session) shows its URL with the API key, vault key and VNC or WebRTC
+  password as `REDACTED`.
 
 ### Crawl prompt and extract
 
@@ -31,24 +72,25 @@
   `--search`. The schema constrains the model as it generates and is not
   validated again: validate anything you act on.
 
-### `scrape batch` correlation IDs
+### Self-update
 
-- A JSONL line's `correlation_id` key is read, which was silently dropped
-  (only `CorrelationID` bound), so the line's result carries its own ID rather
-  than an `item-N`.
-- `item-N` numbers a config by its position in the batch, one numbering across
-  `--url` and `--url-file`: a blank `--url` still used up its number, so a
-  `--url-file` line could take the ID of a `--url` entry and the batch was
-  refused. A JSONL line without a `correlation_id` never takes an ID another
-  line names; it gets the first `item-N` past the end of the batch instead.
-- Two JSONL lines naming the same `correlation_id` are refused before anything
-  is sent, with the ID and its stdin line numbers, as the API refuses them.
+- `scrapfly update` on Windows unzips the release archive; it read the `.zip`
+  as a tarball and failed. From 0.4.1 or older, install 0.5.0 once from the
+  release's `scrapfly-windows-amd64.zip`; `scrapfly update` works from there.
 
-### macOS 13 or later
+### Webhooks
 
-The binaries are built with Go 1.27, so the macOS builds need macOS 13 Ventura
-or later; 0.4.1 supported macOS 12 Monterey. Building from source needs Go 1.27
-or later.
+- `screenshot --webhook` prints `{"webhook_enqueued": true, "job_uuid": ...}`
+  instead of failing with `API returned status 201`.
+- `scrape --webhook` prints the queued result instead of failing with
+  `scrape failed with status: QUEUED`.
+- A `scrape batch` JSONL line with a webhook prints its queued result; 0.4.1
+  printed an empty one.
+
+### Browser
+
+- `browser execute` takes two more actions: `cdp`, one raw protocol call on the
+  page session, and `events`, the events that session buffered.
 
 ## 0.4.1
 

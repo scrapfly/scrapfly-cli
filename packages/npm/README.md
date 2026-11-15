@@ -9,6 +9,9 @@ npm install -D scrapfly-cli
 npx scrapfly version
 ```
 
+0.5.0 and later need macOS 13 or later; on macOS 12 install
+`scrapfly-cli@0.4.1`.
+
 Set `SCRAPFLY_CLI_VERSION=v0.2.0` to pin a release. Set
 `SCRAPFLY_CLI_SKIP_DOWNLOAD=1` to skip the postinstall step (e.g. on CI
 runners where the binary is already installed).
