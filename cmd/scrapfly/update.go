@@ -68,7 +68,9 @@ is passed, download + verify + replace the currently running binary.
 
 The update is checksum-verified (checksums.txt from the release), atomic
 (new binary written to a temp file next to the current one, then renamed),
-and reversible (the previous binary is kept as .bak for one cycle).`,
+and reversible (the previous binary is kept as .bak for one cycle). On macOS
+it refuses a release that needs a newer macOS than this Mac runs, and keeps
+the current binary.`,
 		Example: `  scrapfly update --check       # just report whether a newer version exists
   scrapfly update --yes          # install silently
   scrapfly update                 # prompt for confirmation`,
@@ -176,9 +178,16 @@ func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
 
 // installRelease downloads the archive for the current os/arch, verifies
 // its sha256 against checksums.txt, extracts the `scrapfly` binary, and
-// atomically replaces the currently running executable.
+// atomically replaces the currently running executable. On macOS it first
+// refuses a binary that needs a newer macOS than this Mac runs.
 func installRelease(ctx context.Context, rel *githubRelease) error {
-	candidates := assetCandidates(runtime.GOOS, runtime.GOARCH)
+	return installReleaseFor(ctx, rel, runtime.GOOS, runtime.GOARCH, runningMacOS, swapBinary)
+}
+
+// installReleaseFor is installRelease for goos and goarch, with the macOS
+// version read by running and the binary put in place by swap.
+func installReleaseFor(ctx context.Context, rel *githubRelease, goos, goarch string, running func() (macOSVersion, error), swap func(string) error) error {
+	candidates := assetCandidates(goos, goarch)
 	var archive, checksums *githubAsset
 	for i := range rel.Assets {
 		a := &rel.Assets[i]
@@ -208,7 +217,7 @@ func installRelease(ctx context.Context, rel *githubRelease) error {
 		return err
 	}
 
-	tmpArchive, err := downloadToTemp(ctx, archive.BrowserDownloadURL)
+	tmpArchive, err := downloadToTemp(ctx, archive.BrowserDownloadURL, archive.Name)
 	if err != nil {
 		return err
 	}
@@ -224,7 +233,11 @@ func installRelease(ctx context.Context, rel *githubRelease) error {
 	}
 	defer os.Remove(extracted)
 
-	return swapBinary(extracted)
+	if err := guardMacOSRelease(goos, goarch, extracted, rel.TagName, running); err != nil {
+		return err
+	}
+
+	return swap(extracted)
 }
 
 func fetchChecksum(ctx context.Context, url, filename string) (string, error) {
@@ -257,7 +270,9 @@ func fetchChecksum(ctx context.Context, url, filename string) (string, error) {
 	return "", fmt.Errorf("no checksum for %s in checksums.txt", filename)
 }
 
-func downloadToTemp(ctx context.Context, url string) (string, error) {
+// downloadToTemp saves url to a temp file whose name ends with name, the
+// extension extractBinary reads the archive format from.
+func downloadToTemp(ctx context.Context, url, name string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
@@ -272,7 +287,7 @@ func downloadToTemp(ctx context.Context, url string) (string, error) {
 		return "", fmt.Errorf("download %s returned %d", url, resp.StatusCode)
 	}
 
-	tmp, err := os.CreateTemp("", "scrapfly-update-*.tar.gz")
+	tmp, err := os.CreateTemp("", "scrapfly-update-*-"+name)
 	if err != nil {
 		return "", err
 	}
@@ -306,8 +321,8 @@ func verifySHA256(path, expected string) error {
 }
 
 // assetCandidates returns the list of release-asset names to try for a
-// given OS/arch, in preference order. Matches the .goreleaser.yaml +
-// .goreleaser-linux-windows.yaml naming: `scrapfly-{os}-{arch}.tar.gz`
+// given OS/arch, in preference order. Matches the .goreleaser.yaml,
+// .goreleaser-linux.yaml and .goreleaser-windows.yaml naming: `scrapfly-{os}-{arch}.tar.gz`
 // for unix-like targets, `.zip` for windows. macOS also publishes a
 // universal binary which is preferred when present.
 func assetCandidates(osName, arch string) []string {

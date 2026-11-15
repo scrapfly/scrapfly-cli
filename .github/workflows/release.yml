@@ -39,9 +39,9 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-  # ── CI gate: same checks as .github/workflows/ci.yml but pinned to the
+  # ── CI gate: the Linux checks of .github/workflows/ci.yml, pinned to the
   #    release tag. Every build job `needs: ci` so no archive ships if
-  #    any check fails.
+  #    any check fails; build-darwin runs the macOS tests before it builds.
   ci:
     runs-on: ubuntu-latest
     needs: resolve-tag
@@ -84,6 +84,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: go test
+        run: go test ./cmd/scrapfly/
+      - name: the real macOS version is read under SYSTEM_VERSION_COMPAT=1
+        env:
+          SYSTEM_VERSION_COMPAT: "1"
+        run: go test -count=1 -run TestRunningMacOSReadsThisMac ./cmd/scrapfly/
       # An unset secret reaches goreleaser as an empty string, which fails
       # deep in the p12 parser. Name the missing one instead.
       - name: Require signing secrets

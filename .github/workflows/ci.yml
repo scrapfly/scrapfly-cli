@@ -63,3 +63,40 @@ jobs:
         run: |
           node packages/npm/install.js | tee "$RUNNER_TEMP/npm-unsigned.log"
           grep -q 'notarization not confirmed' "$RUNNER_TEMP/npm-unsigned.log"
+      - name: the installers refuse the latest release on macOS 12
+        run: |
+          mkdir -p "$RUNNER_TEMP/macos12"
+          # macOS 12.7.4, which says 10.16 to a process run with SYSTEM_VERSION_COMPAT=1
+          printf '#!/bin/sh\nif [ "$SYSTEM_VERSION_COMPAT" = 1 ]; then echo 10.16; else echo 12.7.4; fi\n' > "$RUNNER_TEMP/macos12/sw_vers"
+          export SYSTEM_VERSION_COMPAT=1
+          chmod +x "$RUNNER_TEMP/macos12/sw_vers"
+          export PATH="$RUNNER_TEMP/macos12:$PATH"
+          if sh install.sh --prefix "$RUNNER_TEMP/refused" 2> "$RUNNER_TEMP/refused.log"; then
+            echo "::error::install.sh installed the latest release on macOS 12"
+            exit 1
+          fi
+          grep -q -- '--version v0.4.1' "$RUNNER_TEMP/refused.log"
+          sh install.sh --version v0.4.1 --prefix "$RUNNER_TEMP/pinned"
+          test -x "$RUNNER_TEMP/pinned/scrapfly"
+          if SCRAPFLY_CLI_VERSION=v0.5.0 node packages/npm/install.js 2> "$RUNNER_TEMP/npm-refused.log"; then
+            echo "::error::the npm installer installed v0.5.0 on macOS 12"
+            exit 1
+          fi
+          grep -q 'scrapfly-cli@0.4.1' "$RUNNER_TEMP/npm-refused.log"
+
+  # The macOS-only code of the self-update (the running macOS version) runs
+  # only here.
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: go test
+        run: go test ./cmd/scrapfly/
+      - name: the real macOS version is read under SYSTEM_VERSION_COMPAT=1
+        env:
+          SYSTEM_VERSION_COMPAT: "1"
+        run: go test -count=1 -run TestRunningMacOSReadsThisMac ./cmd/scrapfly/

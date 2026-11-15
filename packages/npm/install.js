@@ -40,6 +40,26 @@ if (platform === 'darwin') {
   process.exit(1);
 }
 
+// Refuse 0.5.0 and later on a macOS older than 13, the oldest they start on.
+if (platform === 'darwin') {
+  const [major, minor] = version.replace(/^v/, '').split('.').map((n) => parseInt(n, 10));
+  const needsMacOS13 = major > 0 || minor >= 5;
+  // SYSTEM_VERSION_COMPAT=1 would report macOS 11 and later as 10.16.
+  const swVers = spawnSync('sw_vers', ['-productVersion'], {
+    encoding: 'utf8',
+    env: { ...process.env, SYSTEM_VERSION_COMPAT: '0' },
+  });
+  const macos = String(swVers.stdout || '').trim();
+  const macosMajor = parseInt(macos.split('.')[0], 10);
+  if (needsMacOS13 && macosMajor < 13) {
+    console.error(`[scrapfly-cli] ${version} needs macOS 13 or later and this Mac runs macOS ${macos}.`);
+    if (macosMajor === 12) {
+      console.error('[scrapfly-cli] install 0.4.1, the last release for macOS 12: npm install scrapfly-cli@0.4.1');
+    }
+    process.exit(1);
+  }
+}
+
 const url = `https://github.com/scrapfly/scrapfly-cli/releases/download/${version}/${asset}`;
 const vendor = path.join(__dirname, 'vendor');
 fs.mkdirSync(vendor, { recursive: true });

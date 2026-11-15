@@ -8,7 +8,8 @@
 #   curl -fsSL https://scrapfly.io/scrapfly-cli/install | SCRAPFLY_VERSION=v0.1.0 sh
 #
 # Flags / env:
-#   --version <tag>      (or $SCRAPFLY_VERSION) pin a release. Default: latest.
+#   --version <tag>      (or $SCRAPFLY_VERSION) pin a release. Default: latest,
+#                        which needs macOS 13 or later; on macOS 12 pass v0.4.1.
 #   --prefix <dir>       install dir for the binary. Default: /usr/local/bin
 #                        (falls back to $HOME/.local/bin if not writable).
 #   --dest   <path>      explicit file path for the binary (overrides --prefix).
@@ -37,7 +38,7 @@ while [ "$#" -gt 0 ]; do
     --repo)       REPO="$2"; shift 2 ;;
     --no-verify)  VERIFY=0; shift ;;
     -h|--help)
-      sed -n '3,23p' "$0"; exit 0 ;;
+      sed -n '3,24p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -65,6 +66,26 @@ if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
 else
   base="https://github.com/${REPO}/releases/download/${VERSION}"
 fi
+
+# Refuse the latest release on a macOS older than the oldest it starts on.
+MACOS_MIN_LATEST=13
+if [ "$os" = "darwin" ] && [ "$VERSION" = "latest" ]; then
+  # SYSTEM_VERSION_COMPAT=1 would report macOS 11 and later as 10.16.
+  macos=$(SYSTEM_VERSION_COMPAT=0 sw_vers -productVersion 2>/dev/null || true)
+  major=${macos%%.*}
+  case "$major" in
+    ""|*[!0-9]*) ;;
+    *)
+      refusal="the latest release needs macOS $MACOS_MIN_LATEST or later and this Mac runs macOS $macos"
+      if [ "$major" -eq 12 ]; then
+        fatal "$refusal; to install v0.4.1, the last release for macOS 12: curl -fsSL https://scrapfly.io/scrapfly-cli/install | sh -s -- --version v0.4.1"
+      elif [ "$major" -lt "$MACOS_MIN_LATEST" ]; then
+        fatal "$refusal"
+      fi
+      ;;
+  esac
+fi
+
 url="${base}/${asset}"
 checksums_url="${base}/checksums.txt"
 
