@@ -136,7 +136,7 @@ async function extractZip(stream, outDir) {
   console.log('    1. scrapfly config set-key scp-live-...');
   console.log('    2. teach your AI assistant (Claude Code, Cursor, Codex, ...)');
   console.log('       how to drive Scrapfly:');
-  console.log('         npx skills add scrapfly/scrapfly-cli');
+  console.log('         npx skills add scrapfly/skills --skill scrapfly-cli');
   console.log('');
   console.log('  docs: https://scrapfly.io/docs');
 })().catch((err) => {

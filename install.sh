@@ -171,7 +171,7 @@ next steps
   1. scrapfly config set-key scp-live-...
   2. teach your AI assistant (Claude Code, Cursor, Codex, Copilot, ...)
      how to drive Scrapfly:
-       npx skills add scrapfly/scrapfly-cli
+       npx skills add scrapfly/skills --skill scrapfly-cli
 
 docs: https://scrapfly.io/docs
 EOF
