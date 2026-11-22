@@ -190,6 +190,11 @@ func installRelease(ctx context.Context, rel *githubRelease) error {
 		exe = resolved
 	}
 
+	// A concurrently replaced running executable can now resolve to its backup.
+	if strings.EqualFold(filepath.Ext(exe), ".bak") {
+		return fmt.Errorf("cannot update a backup executable; restore it under its original name first")
+	}
+
 	return installReleaseFor(ctx, rel, runtime.GOOS, runtime.GOARCH, filepath.Dir(exe), runningMacOS,
 		func(extracted string) error { return swapBinary(exe, extracted) })
 }
@@ -438,19 +443,38 @@ func writeTempBinary(dir string, src io.Reader) (string, error) {
 // previous binary is kept as `<exe>.bak` so a failed rollout can be
 // recovered with a single `mv`.
 func swapBinary(exe, newBinary string) error {
-	backup := exe + ".bak"
-	// Best-effort: drop any previous .bak so the rename below succeeds
-	// on systems where rename over an existing file is disallowed.
-	_ = os.Remove(backup)
-	if err := os.Rename(exe, backup); err != nil {
-		return fmt.Errorf("back up current binary: %w", err)
+	return withUpdateLock(exe, func() error {
+		if _, err := os.Stat(exe); err != nil {
+			return fmt.Errorf("inspect current binary before backup: %w", err)
+		}
+		backup := exe + ".bak"
+		// Best-effort: drop any previous .bak so the rename below succeeds
+		// on systems where rename over an existing file is disallowed.
+		_ = os.Remove(backup)
+		if err := os.Rename(exe, backup); err != nil {
+			return fmt.Errorf("back up current binary: %w", err)
+		}
+		if err := os.Rename(newBinary, exe); err != nil {
+			// Best-effort rollback.
+			_ = os.Rename(backup, exe)
+			return fmt.Errorf("install new binary: %w", err)
+		}
+		return nil
+	})
+}
+
+func withUpdateLock(exe string, operation func() error) error {
+	// Keep the lock file: removing it could let another updater lock a
+	// different inode while this installation is still in progress.
+	lock, err := os.OpenFile(exe+".update.lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("open update lock: %w", err)
 	}
-	if err := os.Rename(newBinary, exe); err != nil {
-		// Best-effort rollback.
-		_ = os.Rename(backup, exe)
-		return fmt.Errorf("install new binary: %w", err)
+	defer lock.Close()
+	if err := lockUpdateFile(lock); err != nil {
+		return fmt.Errorf("acquire update lock (another update may be running): %w", err)
 	}
-	return nil
+	return operation()
 }
 
 // normalizeVersion strips a leading "v" and any whitespace so version

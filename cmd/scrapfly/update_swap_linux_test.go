@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -82,8 +86,8 @@ func TestUpdateAcrossFilesystems(t *testing.T) {
 		t.Fatalf("download directory was not cleaned: %v, %v", entries, err)
 	}
 	entries, err = os.ReadDir(installDir)
-	if err != nil || len(entries) != 2 {
-		t.Fatalf("installation directory should contain only the binary and backup: %v, %v", entries, err)
+	if err != nil || len(entries) != 3 {
+		t.Fatalf("installation directory should contain only the binary, backup and update lock: %v, %v", entries, err)
 	}
 }
 
@@ -98,4 +102,91 @@ func deviceID(t *testing.T, path string) uint64 {
 		t.Fatal("filesystem device ID unavailable")
 	}
 	return uint64(stats.Dev)
+}
+
+func TestUpdateRejectsRenamedRunningBackup(t *testing.T) {
+	const barrierEnv = "SCRAPFLY_TEST_BACKUP_BARRIER"
+	if os.Getenv(barrierEnv) == "1" {
+		fmt.Println("ready")
+		if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+			t.Fatal(err)
+		}
+		exe, err := os.Executable()
+		if err != nil || !strings.HasSuffix(exe, ".bak") {
+			t.Fatalf("expected renamed executable: %q %v", exe, err)
+		}
+		release := &githubRelease{TagName: "v9.0.0", Assets: []githubAsset{
+			{Name: "scrapfly-linux-" + runtime.GOARCH + ".tar.gz", BrowserDownloadURL: os.Getenv("SCRAPFLY_TEST_BACKUP_ASSET")},
+			{Name: "checksums.txt", BrowserDownloadURL: os.Getenv("SCRAPFLY_TEST_BACKUP_CHECKSUM")},
+		}}
+		err = installRelease(t.Context(), release)
+		if err == nil || !strings.Contains(err.Error(), "cannot update a backup executable") {
+			t.Fatalf("expected backup rejection before release processing, got %v", err)
+		}
+		return
+	}
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "scrapfly")
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe, binary, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	child := exec.CommandContext(t.Context(), exe, "-test.run=^TestUpdateRejectsRenamedRunningBackup$")
+	release := releaseServing(t, "scrapfly-linux-"+runtime.GOARCH+".tar.gz", tarGzOf(t, "scrapfly", []byte("downloaded successor")))
+	child.Env = append(os.Environ(), barrierEnv+"=1",
+		"SCRAPFLY_TEST_BACKUP_ASSET="+release.Assets[0].BrowserDownloadURL,
+		"SCRAPFLY_TEST_BACKUP_CHECKSUM="+release.Assets[1].BrowserDownloadURL)
+	input, err := child.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := child.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	child.Stderr = &stderr
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = input.Close(); _ = child.Process.Kill() })
+	reader := bufio.NewReader(output)
+	if line, err := reader.ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("child not ready: %q %v", line, err)
+	}
+	successor := exe + ".new"
+	if err := os.WriteFile(successor, []byte("successor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := swapBinary(exe, successor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fmt.Fprintln(input, "continue"); err != nil {
+		t.Fatal(err)
+	}
+	// Drain stdout before Wait because the helper writes its test result there.
+	var result bytes.Buffer
+	if _, err := result.ReadFrom(reader); err != nil {
+		t.Fatal(err)
+	}
+	if err := child.Wait(); err != nil {
+		t.Fatalf("child: %v %s %s", err, result.String(), stderr.String())
+	}
+	for suffix, want := range map[string][]byte{"": []byte("successor"), ".bak": binary, ".update.lock": {}} {
+		got, err := os.ReadFile(exe + suffix)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("installation changed at %s: %v", suffix, err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 3 {
+		t.Fatalf("unexpected backup output: %v %v", entries, err)
+	}
 }

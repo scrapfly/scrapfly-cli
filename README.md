@@ -102,6 +102,14 @@ scrapfly update           # upgrade in place to the latest GitHub release
 scrapfly update --check   # just print whether a newer version exists
 ```
 
+Concurrent updates to the same installation are refused while a binary swap is
+in progress. An empty `<executable>.update.lock` file (normally `scrapfly.update.lock`) remains
+beside the executable. Leave
+it in place, including after an interrupted update. The operating system releases
+the lock when the updater exits. Older CLI versions do not honor this lock.
+The `.bak` suffix is reserved for recovery. An updater running from a backup
+refuses to install. Restore the backup under its original name before updating.
+
 To pin a specific release, pass `--version` to the installer:
 
 ```bash
