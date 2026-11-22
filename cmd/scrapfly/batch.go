@@ -114,7 +114,7 @@ what a line leaves out: --proxy-pool a line naming no "proxy_pool", and
 
 	cmd.Flags().StringArrayVar(&urls, "url", nil, "URL to scrape (repeatable)")
 	cmd.Flags().StringVar(&urlFile, "url-file", "", "path to a newline-delimited file of URLs")
-	cmd.Flags().StringVar(&country, "country", "", "proxy country (ISO 3166-1 alpha-2) applied to every config")
+	cmd.Flags().StringVar(&country, "country", "", "default proxy country selection for the batch (e.g. us, us,ca, -us,-ca, us:1,ca:2)")
 	bindProxyPoolFlags(cmd, &pool, " for every config")
 	cmd.Flags().BoolVar(&renderJS, "render-js", false, "render JavaScript on every URL in the batch")
 	cmd.Flags().BoolVar(&msgpack, "msgpack", false, "negotiate per-part msgpack instead of JSON")

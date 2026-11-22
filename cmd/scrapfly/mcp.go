@@ -99,7 +99,7 @@ type mcpScrapeArgs struct {
 	ProxyPool        string `json:"proxy_pool,omitempty"         jsonschema:"proxy pool, sent as given: public_datacenter_pool (the default), public_residential_pool, public_tor_pool or a pool of your own"`
 	Unblocker        *bool  `json:"unblocker,omitempty"          jsonschema:"enable the Unblocker (anti-bot bypass), sent as asp=true"`
 	ASP              *bool  `json:"asp,omitempty"                jsonschema:"deprecated alias for unblocker; still honored, and it wins when both are given"`
-	Country          string `json:"country,omitempty"            jsonschema:"ISO country code for the proxy (e.g. us, fr)"`
+	Country          string `json:"country,omitempty"            jsonschema:"Proxy country selection (e.g. us or us,ca). Supports exclusions and weighted entries."`
 	Format           string `json:"format,omitempty"             jsonschema:"response format: raw|markdown|clean_html|text"`
 	ExtractionPrompt string `json:"extraction_prompt,omitempty"  jsonschema:"AI extraction prompt applied to the scraped content"`
 	ExtractionModel  string `json:"extraction_model,omitempty"   jsonschema:"named extraction model (product, article, job_posting, ...)"`

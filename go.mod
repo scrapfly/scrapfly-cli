@@ -9,7 +9,7 @@ require (
 	github.com/google/jsonschema-go v0.4.2
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/openai/openai-go v1.12.0
-	github.com/scrapfly/go-scrapfly v1.8.0
+	github.com/scrapfly/go-scrapfly v1.8.1-0.20261122215944-b077d14f1f97
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.41.0
 	google.golang.org/genai v1.54.0

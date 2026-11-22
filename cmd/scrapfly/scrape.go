@@ -342,7 +342,7 @@ Flag groups:
 	cmd.Flags().StringVar(&body, "body", "", "raw request body")
 	cmd.Flags().StringVar(&bodyFile, "body-file", "", "read request body from file")
 
-	cmd.Flags().StringVar(&country, "country", "", "proxy country (ISO 3166-1 alpha-2, e.g. us, uk)")
+	cmd.Flags().StringVar(&country, "country", "", "proxy country selection (e.g. us, us,ca, -us,-ca, us:1,ca:2)")
 	cmd.Flags().StringSliceVar(&lang, "lang", nil, "Accept-Language values (e.g. en-US,fr-FR)")
 	cmd.Flags().StringVar(&osSpoof, "os", "", "spoof OS in user-agent")
 	cmd.Flags().StringVar(&browserBrand, "browser-brand", "", "chrome|edge|brave|opera")
