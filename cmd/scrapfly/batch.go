@@ -190,6 +190,9 @@ func collectBatchConfigs(
 			if !cfg.RenderJS {
 				cfg.RenderJS = renderJS
 			}
+			if len(cfg.JSScenario) > 0 && !cfg.RenderJS {
+				return nil, fmt.Errorf("JSONL line %d: JSScenario requires RenderJS or --render-js", lineNo)
+			}
 			// A line's own proxy_pool and asp/unblocker win, false included.
 			linePool, lineASP := pool.resolveLine(string(cfg.ProxyPool), lineUnblocker)
 			cfg.ProxyPool = scrapfly.ProxyPool(linePool)

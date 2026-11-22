@@ -256,6 +256,9 @@ Flag groups:
 				if err := json.Unmarshal(raw, &steps); err != nil {
 					return fmt.Errorf("parse --js-scenario-file (JSON array expected): %w", err)
 				}
+				if len(steps) > 0 && !cfg.RenderJS {
+					return fmt.Errorf("--js-scenario-file requires --render-js")
+				}
 				cfg.JSScenario = steps
 			}
 
@@ -350,7 +353,7 @@ Flag groups:
 	cmd.Flags().IntVar(&renderingWait, "rendering-wait", 0, "extra wait (ms) after load (requires --render-js)")
 	cmd.Flags().StringVar(&renderingStage, "rendering-stage", "", "complete|domcontentloaded")
 	cmd.Flags().StringVar(&jsFile, "js-file", "", "file containing JS to execute in browser")
-	cmd.Flags().StringVar(&jsScenarioFile, "js-scenario-file", "", "JSON file with JS scenario steps (array of action objects; see scrapfly.io/docs)")
+	cmd.Flags().StringVar(&jsScenarioFile, "js-scenario-file", "", "JSON file with JS scenario steps (requires --render-js)")
 	cmd.Flags().BoolVar(&autoScroll, "auto-scroll", false, "auto-scroll page to load lazy content")
 
 	bindProxyPoolFlags(cmd, &pool, "")
