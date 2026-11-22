@@ -97,7 +97,7 @@ func TestInstallReleaseRefusesBeforeTheSwap(t *testing.T) {
 	rel := releaseServing(t, "scrapfly-darwin-universal.tar.gz", tarGzOf(t, "scrapfly", binary))
 
 	var refused swapRecorder
-	err := installReleaseFor(context.Background(), rel, "darwin", "arm64", runningAt(t, "12.7.4"), refused.swap)
+	err := installReleaseFor(context.Background(), rel, "darwin", "arm64", t.TempDir(), runningAt(t, "12.7.4"), refused.swap)
 	if err == nil || !strings.Contains(err.Error(), "v0.4.1 is the last release for macOS 12") {
 		t.Errorf("want the macOS 12 refusal, got %v", err)
 	}
@@ -106,14 +106,14 @@ func TestInstallReleaseRefusesBeforeTheSwap(t *testing.T) {
 	}
 
 	var unread swapRecorder
-	err = installReleaseFor(context.Background(), rel, "darwin", "arm64",
+	err = installReleaseFor(context.Background(), rel, "darwin", "arm64", t.TempDir(),
 		func() (macOSVersion, error) { return macOSVersion{}, errors.New("no sysctl") }, unread.swap)
 	if err == nil || unread.calls != 0 {
 		t.Errorf("an unreadable macOS version let the swap run: %v, %d swaps", err, unread.calls)
 	}
 
 	var accepted swapRecorder
-	if err := installReleaseFor(context.Background(), rel, "darwin", "arm64", runningAt(t, "13.5"), accepted.swap); err != nil {
+	if err := installReleaseFor(context.Background(), rel, "darwin", "arm64", t.TempDir(), runningAt(t, "13.5"), accepted.swap); err != nil {
 		t.Fatal(err)
 	}
 	if accepted.calls != 1 || !bytes.Equal(accepted.content, binary) {
@@ -132,7 +132,7 @@ func TestInstallReleaseOffMacOS(t *testing.T) {
 	linuxBinary := []byte("\x7fELF linux binary")
 	var linux swapRecorder
 	rel := releaseServing(t, "scrapfly-linux-amd64.tar.gz", tarGzOf(t, "scrapfly", linuxBinary))
-	if err := installReleaseFor(context.Background(), rel, "linux", "amd64", notAsked, linux.swap); err != nil {
+	if err := installReleaseFor(context.Background(), rel, "linux", "amd64", t.TempDir(), notAsked, linux.swap); err != nil {
 		t.Fatal(err)
 	}
 	if linux.calls != 1 || !bytes.Equal(linux.content, linuxBinary) {
@@ -142,7 +142,7 @@ func TestInstallReleaseOffMacOS(t *testing.T) {
 	windowsBinary := []byte("MZ windows binary")
 	var windows swapRecorder
 	rel = releaseServing(t, "scrapfly-windows-amd64.zip", zipOf(t, "scrapfly.exe", windowsBinary))
-	if err := installReleaseFor(context.Background(), rel, "windows", "amd64", notAsked, windows.swap); err != nil {
+	if err := installReleaseFor(context.Background(), rel, "windows", "amd64", t.TempDir(), notAsked, windows.swap); err != nil {
 		t.Fatal(err)
 	}
 	if windows.calls != 1 || !bytes.Equal(windows.content, windowsBinary) {

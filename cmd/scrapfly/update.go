@@ -181,12 +181,22 @@ func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
 // atomically replaces the currently running executable. On macOS it first
 // refuses a binary that needs a newer macOS than this Mac runs.
 func installRelease(ctx context.Context, rel *githubRelease) error {
-	return installReleaseFor(ctx, rel, runtime.GOOS, runtime.GOARCH, runningMacOS, swapBinary)
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate installed executable: %w", err)
+	}
+	// Replace the real binary when the command is invoked through a symlink.
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+
+	return installReleaseFor(ctx, rel, runtime.GOOS, runtime.GOARCH, filepath.Dir(exe), runningMacOS,
+		func(extracted string) error { return swapBinary(exe, extracted) })
 }
 
 // installReleaseFor is installRelease for goos and goarch, with the macOS
-// version read by running and the binary put in place by swap.
-func installReleaseFor(ctx context.Context, rel *githubRelease, goos, goarch string, running func() (macOSVersion, error), swap func(string) error) error {
+// version read by running, with extraction into binaryDir before swap.
+func installReleaseFor(ctx context.Context, rel *githubRelease, goos, goarch, binaryDir string, running func() (macOSVersion, error), swap func(string) error) error {
 	candidates := assetCandidates(goos, goarch)
 	var archive, checksums *githubAsset
 	for i := range rel.Assets {
@@ -227,7 +237,7 @@ func installReleaseFor(ctx context.Context, rel *githubRelease, goos, goarch str
 		return fmt.Errorf("checksum mismatch on %s: %w", archive.Name, err)
 	}
 
-	extracted, err := extractBinary(tmpArchive)
+	extracted, err := extractBinary(tmpArchive, binaryDir)
 	if err != nil {
 		return err
 	}
@@ -342,14 +352,14 @@ func assetCandidates(osName, arch string) []string {
 // extractBinary opens the release archive (tar.gz for unix, zip for
 // windows) and writes the `scrapfly` entry to a temp file, returning
 // its path. Caller owns cleanup.
-func extractBinary(archivePath string) (string, error) {
+func extractBinary(archivePath, binaryDir string) (string, error) {
 	if strings.HasSuffix(archivePath, ".zip") {
-		return extractZipBinary(archivePath)
+		return extractZipBinary(archivePath, binaryDir)
 	}
-	return extractTarGzBinary(archivePath)
+	return extractTarGzBinary(archivePath, binaryDir)
 }
 
-func extractTarGzBinary(archivePath string) (string, error) {
+func extractTarGzBinary(archivePath, binaryDir string) (string, error) {
 	f, err := os.Open(archivePath)
 	if err != nil {
 		return "", err
@@ -377,11 +387,11 @@ func extractTarGzBinary(archivePath string) (string, error) {
 		if base != "scrapfly" && base != "scrapfly.exe" {
 			continue
 		}
-		return writeTempBinary(tr)
+		return writeTempBinary(binaryDir, tr)
 	}
 }
 
-func extractZipBinary(archivePath string) (string, error) {
+func extractZipBinary(archivePath, binaryDir string) (string, error) {
 	zr, err := zip.OpenReader(archivePath)
 	if err != nil {
 		return "", err
@@ -396,15 +406,15 @@ func extractZipBinary(archivePath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		path, err := writeTempBinary(rc)
+		path, err := writeTempBinary(binaryDir, rc)
 		rc.Close()
 		return path, err
 	}
 	return "", fmt.Errorf("zip does not contain a `scrapfly` binary")
 }
 
-func writeTempBinary(src io.Reader) (string, error) {
-	tmp, err := os.CreateTemp("", "scrapfly-new-*")
+func writeTempBinary(dir string, src io.Reader) (string, error) {
+	tmp, err := os.CreateTemp(dir, "scrapfly-new-*")
 	if err != nil {
 		return "", err
 	}
@@ -424,21 +434,10 @@ func writeTempBinary(src io.Reader) (string, error) {
 	return tmp.Name(), nil
 }
 
-// swapBinary atomically replaces the currently running executable. The
+// swapBinary replaces the executable with its staged sibling. The
 // previous binary is kept as `<exe>.bak` so a failed rollout can be
 // recovered with a single `mv`.
-func swapBinary(newBinary string) error {
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	// Resolve symlinks so we write to the real binary, not a homebrew
-	// wrapper that points at it.
-	resolved, err := filepath.EvalSymlinks(exe)
-	if err == nil {
-		exe = resolved
-	}
-
+func swapBinary(exe, newBinary string) error {
 	backup := exe + ".bak"
 	// Best-effort: drop any previous .bak so the rename below succeeds
 	// on systems where rename over an existing file is disallowed.
