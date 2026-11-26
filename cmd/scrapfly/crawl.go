@@ -134,7 +134,7 @@ func bindCrawlStartFlags(cmd *cobra.Command, f *crawlStartFlags) {
 	cmd.Flags().BoolVar(&f.refresh, "refresh", false, "keep this crawl fresh: re-scrape its own URLs in place on a period, same UUID")
 	cmd.Flags().IntVar(&f.refreshInterval, "refresh-interval", 0, "seconds between refresh runs, 3600-7776000 (0 = server default)")
 	bindProxyPoolFlags(cmd, &f.pool, " for child scrapes")
-	cmd.Flags().StringVar(&f.country, "country", "", "proxy country for child scrapes")
+	cmd.Flags().StringVar(&f.country, "country", "", "proxy country selection for child scrapes (e.g. us, us,ca, -us)")
 	cmd.Flags().StringVar(&f.webhookName, "webhook", "", "webhook name")
 	cmd.Flags().StringSliceVar(&f.webhookEvents, "webhook-event", nil, "webhook event (repeatable)")
 	cmd.Flags().StringArrayVar(&f.headerList, "header", nil, "per-scrape request header key=value (repeatable)")

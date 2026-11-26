@@ -134,7 +134,7 @@ Without either, the image is returned base64-encoded inside the JSON envelope.`,
 	cmd.Flags().StringVar(&format, "format", "", "jpg|png|webp|gif")
 	cmd.Flags().StringVar(&capture, "capture", "", "fullpage or CSS selector")
 	cmd.Flags().StringVar(&resolution, "resolution", "", "viewport e.g. 1920x1080")
-	cmd.Flags().StringVar(&country, "country", "", "proxy country")
+	cmd.Flags().StringVar(&country, "country", "", "proxy country selection (e.g. us, us,ca, -us)")
 	cmd.Flags().StringVar(&waitForSelector, "wait-for-selector", "", "CSS selector to wait for")
 	cmd.Flags().IntVar(&renderingWait, "rendering-wait", 0, "extra wait ms after load")
 	cmd.Flags().BoolVar(&autoScroll, "auto-scroll", false, "auto-scroll page")
