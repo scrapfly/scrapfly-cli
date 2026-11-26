@@ -42,7 +42,7 @@ var knownSubcommands = map[string]struct{}{
 
 // rewriteURLShortcut inserts "scrape" before the first URL-looking arg, as
 // long as no known subcommand appears earlier. Lets users write
-// `scrapfly --pretty https://example.com` instead of `scrapfly scrape ...`.
+// `scrapfly --pretty https://web-scraping.dev` instead of `scrapfly scrape ...`.
 //
 // Must be careful NOT to treat flag values as positional URLs: when the
 // previous arg looks like a flag (`--host`, `-h`, ...) and has no `=`,
@@ -107,14 +107,14 @@ Examples:
     --render-js --unblocker --country us --format markdown
 
   # Screenshot saved into a directory
-  scrapfly -O ./shots screenshot https://example.com --resolution 1920x1080
+  scrapfly -O ./shots screenshot https://web-scraping.dev --resolution 1920x1080
 
   # Pipe scrape body into extract (Scrapfly-fetched + AI extraction)
   scrapfly scrape https://web-scraping.dev/product/1 --render-js --proxified \
     | scrapfly extract --content-type text/html --prompt "name, price, sku"
 
   # Crawl 20 pages synchronously
-  scrapfly crawl run https://example.com --max-pages 20 --content-format markdown`,
+  scrapfly crawl run https://web-scraping.dev --max-pages 20 --content-format markdown`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version,

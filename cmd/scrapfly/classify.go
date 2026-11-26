@@ -48,20 +48,20 @@ Input modes (mirrors ` + "`scrapfly extract`" + ` piping):
   stdin              pipe the body in; pass --status-code + --header.
   --body STRING      inline body for short snippets.`,
 		Example: `  # Let the CLI do the fetch
-  scrapfly scraper classify --url https://target.example.com/ --fetch
+  scrapfly scraper classify --url https://web-scraping.dev/ --fetch
 
   # Pipe from any external fetcher
-  curl -s https://target.example.com/ \
-    | scrapfly scraper classify --url https://target.example.com/ \
+  curl -s https://web-scraping.dev/ \
+    | scrapfly scraper classify --url https://web-scraping.dev/ \
         --status-code 403 --header server:cloudflare --header cf-mitigated:challenge
 
   # Pipe raw body from scrape --proxified (Scrapfly-fetched)
-  scrapfly scrape https://target.example.com/ --unblocker --proxified \
-    | scrapfly scraper classify --url https://target.example.com/ \
+  scrapfly scrape https://web-scraping.dev/ --unblocker --proxified \
+    | scrapfly scraper classify --url https://web-scraping.dev/ \
         --status-code 403 --header server:cloudflare
 
   # Local file
-  scrapfly scraper classify --url https://target.example.com/ \
+  scrapfly scraper classify --url https://web-scraping.dev/ \
     --status-code 403 --header server:cloudflare --file response.html`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := buildClient(flags)

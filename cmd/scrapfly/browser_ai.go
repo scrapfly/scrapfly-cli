@@ -169,7 +169,7 @@ then fills that ref. Saves you from hand-crafting selectors for ambiguous pages.
 Provider auto-detects from ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY /
 OLLAMA_HOST. Override with --provider / --model.`,
 		Example: `  scrapfly browser fill-ai "username" user123
-  scrapfly browser fill-ai "the email field" me@example.com --provider openai`,
+  scrapfly browser fill-ai "the email field" me@web-scraping.dev --provider openai`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref, err := resolveRefAI(args[0], provider, model)

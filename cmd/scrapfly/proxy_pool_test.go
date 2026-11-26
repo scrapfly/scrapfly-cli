@@ -425,13 +425,13 @@ func TestBatchJSONLProxyPool(t *testing.T) {
 		flag string
 		want string
 	}{
-		{name: "the line's pool", line: `{"url":"https://a.test","proxy_pool":"public_residential_pool"}`, want: "public_residential_pool"},
-		{name: "the line's pool wins over the flag", line: `{"url":"https://a.test","proxy_pool":"public_tor_pool"}`, flag: "public_residential_pool", want: "public_tor_pool"},
-		{name: "wins over a ProxyPool key", line: `{"url":"https://a.test","ProxyPool":"public_datacenter_pool","proxy_pool":"public_residential_pool"}`, want: "public_residential_pool"},
-		{name: "a ProxyPool key alone still binds", line: `{"url":"https://a.test","ProxyPool":"public_residential_pool"}`, want: "public_residential_pool"},
-		{name: "an empty pool takes the flag", line: `{"url":"https://a.test","proxy_pool":""}`, flag: "public_residential_pool", want: "public_residential_pool"},
-		{name: "no pool takes the flag", line: `{"url":"https://a.test"}`, flag: "public_residential_pool", want: "public_residential_pool"},
-		{name: "no pool anywhere", line: `{"url":"https://a.test","asp":true}`, want: ""},
+		{name: "the line's pool", line: `{"url":"https://web-scraping.dev/product/1","proxy_pool":"public_residential_pool"}`, want: "public_residential_pool"},
+		{name: "the line's pool wins over the flag", line: `{"url":"https://web-scraping.dev/product/1","proxy_pool":"public_tor_pool"}`, flag: "public_residential_pool", want: "public_tor_pool"},
+		{name: "wins over a ProxyPool key", line: `{"url":"https://web-scraping.dev/product/1","ProxyPool":"public_datacenter_pool","proxy_pool":"public_residential_pool"}`, want: "public_residential_pool"},
+		{name: "a ProxyPool key alone still binds", line: `{"url":"https://web-scraping.dev/product/1","ProxyPool":"public_residential_pool"}`, want: "public_residential_pool"},
+		{name: "an empty pool takes the flag", line: `{"url":"https://web-scraping.dev/product/1","proxy_pool":""}`, flag: "public_residential_pool", want: "public_residential_pool"},
+		{name: "no pool takes the flag", line: `{"url":"https://web-scraping.dev/product/1"}`, flag: "public_residential_pool", want: "public_residential_pool"},
+		{name: "no pool anywhere", line: `{"url":"https://web-scraping.dev/product/1","asp":true}`, want: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			configs, err := collectBatchConfigs(bufio.NewReader(strings.NewReader(tc.line+"\n")), nil, "", "", proxyPoolFlags{pool: tc.flag}, false)
@@ -485,10 +485,10 @@ func TestBatchLineResolve(t *testing.T) {
 func TestBatchSendsNoUnacceptedPool(t *testing.T) {
 	for _, flags := range []proxyPoolFlags{{}, {unblocker: true}, {pool: "public_residential_pool", unblocker: true}} {
 		configs, err := collectBatchConfigs(bufio.NewReader(strings.NewReader(strings.Join([]string{
-			`{"url":"https://a.test"}`,
-			`{"url":"https://a.test","asp":true}`,
-			`{"url":"https://a.test","unblocker":false}`,
-			`{"url":"https://a.test","proxy_pool":"public_tor_pool","asp":true}`,
+			`{"url":"https://web-scraping.dev/product/1"}`,
+			`{"url":"https://web-scraping.dev/product/1","asp":true}`,
+			`{"url":"https://web-scraping.dev/product/1","unblocker":false}`,
+			`{"url":"https://web-scraping.dev/product/1","proxy_pool":"public_tor_pool","asp":true}`,
 		}, "\n")+"\n")), nil, "", "", flags, false)
 		if err != nil {
 			t.Fatal(err)

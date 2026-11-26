@@ -32,11 +32,11 @@ Subcommands:
   refresh <uuid>    re-scrape a crawl in place now, or change its refresh schedule
   refresh-history <uuid>  the crawl's refresh timeline`,
 		Example: `  # Full synchronous crawl, markdown content
-  scrapfly crawl run https://example.com --max-pages 20 --max-depth 2 \
+  scrapfly crawl run https://web-scraping.dev --max-pages 20 --max-depth 2 \
     --content-format markdown
 
   # Start async, then poll + dump
-  UUID=$(scrapfly crawl start https://example.com --max-pages 50 | jq -r .data.crawler_uuid)
+  UUID=$(scrapfly crawl start https://web-scraping.dev --max-pages 50 | jq -r .data.crawler_uuid)
   scrapfly crawl status "$UUID"
   scrapfly crawl urls "$UUID" --status visited
   scrapfly crawl contents "$UUID" --format markdown --limit 50
@@ -45,7 +45,7 @@ Subcommands:
   scrapfly -o crawl.warc.gz crawl artifact "$UUID" --type warc
 
   # Index the crawl, then search and ask across it
-  UUID=$(scrapfly crawl run https://example.com --max-pages 20 --search \
+  UUID=$(scrapfly crawl run https://web-scraping.dev --max-pages 20 --search \
     --content-format markdown | jq -r .data.uuid)
   scrapfly crawl search "$UUID" --query "pricing" --limit 5
   scrapfly crawl prompt "$UUID" --prompt "What does this site sell?"
@@ -230,7 +230,7 @@ func newCrawlStartCmd(flags *rootFlags) *cobra.Command {
 page the crawl scrapes.
 
 ` + proxyPoolHelp,
-		Example: `  scrapfly crawl start https://example.com --max-pages 50 --max-depth 2`,
+		Example: `  scrapfly crawl start https://web-scraping.dev --max-pages 50 --max-depth 2`,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := buildCrawlerConfig(args[0], &f)
@@ -447,7 +447,7 @@ func newCrawlContentsBatchCmd(flags *rootFlags) *cobra.Command {
 URLs can be passed as positional args and/or read from --from-file.
 Formats are repeatable via --format.`,
 		Example: `  scrapfly crawl contents-batch <uuid> \
-    https://example.com https://example.com/page --format markdown --format html`,
+    https://web-scraping.dev https://web-scraping.dev/products --format markdown --format html`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			uuid := args[0]
@@ -498,7 +498,7 @@ func newCrawlRunCmd(flags *rootFlags) *cobra.Command {
 apply to every page the crawl scrapes.
 
 ` + proxyPoolHelp,
-		Example: `  scrapfly crawl run https://example.com \
+		Example: `  scrapfly crawl run https://web-scraping.dev \
     --max-pages 20 --content-format markdown --poll-interval 5s --max-wait 15m`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -97,7 +97,7 @@ envelope.`,
   scrapfly browser execute --url https://web-scraping.dev/products
 
   # Script one-shot
-  printf '%s\n%s\n%s\n' '{"action":"open","url":"https://example.com"}' \
+  printf '%s\n%s\n%s\n' '{"action":"open","url":"https://web-scraping.dev"}' \
     '{"action":"snapshot"}' '{"action":"screenshot"}' \
     | scrapfly browser execute`,
 		RunE: func(cmd *cobra.Command, args []string) error {

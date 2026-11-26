@@ -82,7 +82,7 @@ the normal outcome: the fan-out proved the unopened crawls held nothing
 better. Page with --cursor, never an offset.`,
 		Example: `  scrapfly crawl search 01HX7K4... --query "pricing"
   scrapfly crawl search 01HX7K4... 01HX7M9... --query "TLS fingerprint" --limit 20
-  scrapfly crawl search 01HX7K4... --query docs --filter url_prefix=https://example.com/docs/
+  scrapfly crawl search 01HX7K4... --query docs --filter url_prefix=https://web-scraping.dev/product/
   scrapfly crawl search 01HX7K4... --query docs --mode fts --pretty`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

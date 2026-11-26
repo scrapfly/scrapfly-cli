@@ -118,12 +118,12 @@ func TestDefaultFeedbackActorFallsBackToHuman(t *testing.T) {
 
 func TestWebBaseForHost(t *testing.T) {
 	cases := map[string]string{
-		"":                         "https://scrapfly.io",
-		"https://api.scrapfly.io":  "https://scrapfly.io",
-		"https://api.scrapfly.io/": "https://scrapfly.io",
-		"https://api.example.test": "https://example.test",
+		"":                             "https://scrapfly.io",
+		"https://api.scrapfly.io":      "https://scrapfly.io",
+		"https://api.scrapfly.io/":     "https://scrapfly.io",
+		"https://api.web-scraping.dev": "https://web-scraping.dev",
 		// Already a base domain (self-hosted stack): left alone.
-		"https://scrapfly.example.test:8443": "https://scrapfly.example.test:8443",
+		"https://scrapfly.web-scraping.dev:8443": "https://scrapfly.web-scraping.dev:8443",
 	}
 	for host, want := range cases {
 		if got := webBaseForHost(host); got != want {

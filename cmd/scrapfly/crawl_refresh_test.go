@@ -14,7 +14,7 @@ import (
 )
 
 func TestBuildCrawlerConfig_RefreshFlags(t *testing.T) {
-	cfg, err := buildCrawlerConfig("https://example.com", &crawlStartFlags{
+	cfg, err := buildCrawlerConfig("https://web-scraping.dev", &crawlStartFlags{
 		refresh:         true,
 		refreshInterval: 86400,
 	})
@@ -27,7 +27,7 @@ func TestBuildCrawlerConfig_RefreshFlags(t *testing.T) {
 
 	// Unset means server default: never emit a field to send its default. The
 	// SDK drops both zero values from the wire body.
-	off, err := buildCrawlerConfig("https://example.com", &crawlStartFlags{})
+	off, err := buildCrawlerConfig("https://web-scraping.dev", &crawlStartFlags{})
 	if err != nil {
 		t.Fatal(err)
 	}

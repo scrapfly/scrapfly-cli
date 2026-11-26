@@ -46,7 +46,7 @@ For end-to-end "fetch + extract" use ` + "`scrapfly scrape --extraction-prompt .
         --prompt "product name, price, sku, description"
 
   # Prompt-based extraction from stdin (raw curl)
-  curl -s https://example.com/product \
+  curl -s https://web-scraping.dev/product/1 \
     | scrapfly extract --content-type text/html --prompt "product name, price, sku"
 
   # Model-based extraction from a local file
@@ -54,7 +54,7 @@ For end-to-end "fetch + extract" use ` + "`scrapfly scrape --extraction-prompt .
 
   # Pass URL for extraction context
   scrapfly extract --file page.html --content-type text/html \
-    --url https://example.com/p/42 --prompt "shipping info"`,
+    --url https://web-scraping.dev/product/1 --prompt "shipping info"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Interactive invocation with no stdin piped and no --file:
 			// show help instead of blocking on a tty read.

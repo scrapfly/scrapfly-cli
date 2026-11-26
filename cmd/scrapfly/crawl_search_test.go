@@ -24,8 +24,8 @@ func TestParseSearchFilters(t *testing.T) {
 		{"nil stays nil", nil, nil, false},
 		{
 			"plain string value",
-			[]string{"url_prefix=https://example.com/docs/"},
-			map[string]interface{}{"url_prefix": "https://example.com/docs/"},
+			[]string{"url_prefix=https://web-scraping.dev/docs/"},
+			map[string]interface{}{"url_prefix": "https://web-scraping.dev/docs/"},
 			false,
 		},
 		{
@@ -37,14 +37,14 @@ func TestParseSearchFilters(t *testing.T) {
 		},
 		{
 			"json string list keeps its type",
-			[]string{`host=["a.com","b.com"]`},
-			map[string]interface{}{"host": []interface{}{"a.com", "b.com"}},
+			[]string{`host=["web-scraping.dev","httpbin.dev"]`},
+			map[string]interface{}{"host": []interface{}{"web-scraping.dev", "httpbin.dev"}},
 			false,
 		},
 		{
 			"value containing = is not split twice",
-			[]string{"url_prefix=https://example.com/?a=b"},
-			map[string]interface{}{"url_prefix": "https://example.com/?a=b"},
+			[]string{"url_prefix=https://web-scraping.dev/?a=b"},
+			map[string]interface{}{"url_prefix": "https://web-scraping.dev/?a=b"},
 			false,
 		},
 		{"missing = is rejected", []string{"url_prefix"}, nil, true},
@@ -70,7 +70,7 @@ func TestParseSearchFilters(t *testing.T) {
 }
 
 func TestBuildCrawlerConfig_SearchFlag(t *testing.T) {
-	cfg, err := buildCrawlerConfig("https://example.com", &crawlStartFlags{search: true})
+	cfg, err := buildCrawlerConfig("https://web-scraping.dev", &crawlStartFlags{search: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestBuildCrawlerConfig_SearchFlag(t *testing.T) {
 	}
 
 	// Unset means server default: never emit a field to send its default.
-	off, err := buildCrawlerConfig("https://example.com", &crawlStartFlags{})
+	off, err := buildCrawlerConfig("https://web-scraping.dev", &crawlStartFlags{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestBuildCrawlerConfig_SearchFlag(t *testing.T) {
 }
 
 func TestBuildCrawlerConfig_SearchWebhookEvents(t *testing.T) {
-	cfg, err := buildCrawlerConfig("https://example.com", &crawlStartFlags{
+	cfg, err := buildCrawlerConfig("https://web-scraping.dev", &crawlStartFlags{
 		search:        true,
 		webhookName:   "hook",
 		webhookEvents: []string{"crawler_search_ready", "crawler_search_failed"},
@@ -160,7 +160,7 @@ func TestSanitizeTerminal(t *testing.T) {
 		{"ansi colour escape is stripped", "\x1b[31mred\x1b[0m", "[31mred[0m"},
 		{"osc title escape is stripped", "a\x1b]0;pwned\x07b", "a]0;pwnedb"},
 		{"carriage return cannot overwrite the line", "safe\rmalicious", "safemalicious"},
-		{"bidi override cannot reorder a url", "example.com/‮gnp.exe", "example.com/gnp.exe"},
+		{"bidi override cannot reorder a url", "web-scraping.dev/‮gnp.exe", "web-scraping.dev/gnp.exe"},
 		{"tab and newline survive", "a\tb\nc", "a\tb\nc"},
 		{"non-ascii content survives", "café 日本語", "café 日本語"},
 	}

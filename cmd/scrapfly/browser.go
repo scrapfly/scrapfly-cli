@@ -72,10 +72,10 @@ The WSS URL includes your API key as a query param — treat as a secret.`,
   scrapfly browser --resolution 1920x1080 --pretty
 
   # Unblock a URL and get an attach-ready session
-  scrapfly browser https://example.com --unblock --country us
+  scrapfly browser https://web-scraping.dev --unblock --country us
 
   # Re-use a prior session (requires SDK support for "session" param)
-  scrapfly browser https://example.com --unblock --session sess_abc123`,
+  scrapfly browser https://web-scraping.dev --unblock --session sess_abc123`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := buildClient(flags)

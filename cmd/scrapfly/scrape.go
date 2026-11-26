@@ -96,7 +96,7 @@ Flag groups:
     --header content-type=application/json --body '{"hello":"world"}'
 
   # AI extraction inline
-  scrapfly scrape https://example.com/product \
+  scrapfly scrape https://web-scraping.dev/product/1 \
     --render-js --extraction-prompt "product name, price, sku"
 
   # Pipe scrape body into extract (two-step: fetch then extract)

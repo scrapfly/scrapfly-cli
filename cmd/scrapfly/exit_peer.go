@@ -181,7 +181,7 @@ an RPA Profile.
 
 Run install first; this command does not download anything.`,
 		Example: `  scrapfly exit-peer run --name my-machine
-  scrapfly exit-peer run --name eu-edge --tag zone=eu --allow=*.example.com`,
+  scrapfly exit-peer run --name eu-edge --tag zone=eu --allow=*.web-scraping.dev`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apiKey, _, err := resolveAuthAndHost(flags)
 			if err != nil {

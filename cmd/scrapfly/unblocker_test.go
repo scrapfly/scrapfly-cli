@@ -160,16 +160,16 @@ func TestBatchJSONLUnblocker(t *testing.T) {
 		flag bool
 		want bool
 	}{
-		{name: "unblocker true", line: `{"url":"https://a.test","unblocker":true}`, want: true},
-		{name: "unblocker false", line: `{"url":"https://a.test","unblocker":false}`, flag: true, want: false},
-		{name: "legacy asp true", line: `{"url":"https://a.test","asp":true}`, want: true},
-		{name: "legacy asp false", line: `{"url":"https://a.test","asp":false}`, flag: true, want: false},
-		{name: "asp wins over unblocker", line: `{"url":"https://a.test","asp":false,"unblocker":true}`, want: false},
-		{name: "asp true wins", line: `{"url":"https://a.test","asp":true,"unblocker":false}`, want: true},
-		{name: "neither, flag off", line: `{"url":"https://a.test"}`, want: false},
-		{name: "neither, flag on", line: `{"url":"https://a.test"}`, flag: true, want: true},
-		{name: "explicit null is absent", line: `{"url":"https://a.test","unblocker":null}`, flag: true, want: true},
-		{name: "line true agrees with the flag", line: `{"url":"https://a.test","asp":true}`, flag: true, want: true},
+		{name: "unblocker true", line: `{"url":"https://web-scraping.dev/product/1","unblocker":true}`, want: true},
+		{name: "unblocker false", line: `{"url":"https://web-scraping.dev/product/1","unblocker":false}`, flag: true, want: false},
+		{name: "legacy asp true", line: `{"url":"https://web-scraping.dev/product/1","asp":true}`, want: true},
+		{name: "legacy asp false", line: `{"url":"https://web-scraping.dev/product/1","asp":false}`, flag: true, want: false},
+		{name: "asp wins over unblocker", line: `{"url":"https://web-scraping.dev/product/1","asp":false,"unblocker":true}`, want: false},
+		{name: "asp true wins", line: `{"url":"https://web-scraping.dev/product/1","asp":true,"unblocker":false}`, want: true},
+		{name: "neither, flag off", line: `{"url":"https://web-scraping.dev/product/1"}`, want: false},
+		{name: "neither, flag on", line: `{"url":"https://web-scraping.dev/product/1"}`, flag: true, want: true},
+		{name: "explicit null is absent", line: `{"url":"https://web-scraping.dev/product/1","unblocker":null}`, flag: true, want: true},
+		{name: "line true agrees with the flag", line: `{"url":"https://web-scraping.dev/product/1","asp":true}`, flag: true, want: true},
 	}
 
 	for _, tc := range cases {
@@ -194,7 +194,7 @@ func TestBatchJSONLUnblocker(t *testing.T) {
 			if !unblockerFieldIsUnset(cfg) {
 				t.Error("cfg.Unblocker survived decoding; the SDK's own fallback could then override the resolved value")
 			}
-			if cfg.URL != "https://a.test" {
+			if cfg.URL != "https://web-scraping.dev/product/1" {
 				t.Errorf("cfg.URL = %q, want the line's URL (stripping a key must not drop the rest)", cfg.URL)
 			}
 			if cfg.CorrelationID != "item-1" {
@@ -223,7 +223,7 @@ func TestBatchJSONLBypassKeysKeepDocumentOrder(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			line := `{"URL":"https://a.test",` + tc.keys + `}`
+			line := `{"URL":"https://web-scraping.dev/product/1",` + tc.keys + `}`
 			// Repeated identical input must make the same billing decision.
 			for range 256 {
 				configs, err := collectBatchConfigs(bufio.NewReader(strings.NewReader(line)), nil, "", "", proxyPoolFlags{unblocker: tc.flag}, false)
@@ -239,7 +239,7 @@ func TestBatchJSONLBypassKeysKeepDocumentOrder(t *testing.T) {
 }
 
 func TestBatchJSONLRejectsNonBooleanUnblocker(t *testing.T) {
-	line := bufio.NewReader(strings.NewReader(`{"url":"https://a.test","unblocker":"yes"}` + "\n"))
+	line := bufio.NewReader(strings.NewReader(`{"url":"https://web-scraping.dev/product/1","unblocker":"yes"}` + "\n"))
 	_, err := collectBatchConfigs(line, nil, "", "", proxyPoolFlags{}, false)
 	if err == nil {
 		t.Fatal("want an error for a non-boolean unblocker value")

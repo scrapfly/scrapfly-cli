@@ -36,13 +36,13 @@ func newScreenshotCmd(flags *rootFlags) *cobra.Command {
 specify -o <file> to write to an exact path, or -O <dir> to auto-name.
 Without either, the image is returned base64-encoded inside the JSON envelope.`,
 		Example: `  # Save to an explicit path
-  scrapfly -o shot.png screenshot https://example.com --format png --resolution 1920x1080
+  scrapfly -o shot.png screenshot https://web-scraping.dev/products --format png --resolution 1920x1080
 
   # Save into a directory (auto-named as <host>-<path>-<timestamp>.<ext>)
   scrapfly -O ./shots screenshot https://web-scraping.dev/products
 
   # Capture a specific element, block cookie banners
-  scrapfly -o hero.png screenshot https://example.com \
+  scrapfly -o hero.png screenshot https://web-scraping.dev/products \
     --capture "main .hero" --option block_banners --option dark_mode`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

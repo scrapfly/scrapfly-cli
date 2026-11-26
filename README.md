@@ -142,10 +142,10 @@ scrapfly scrape https://web-scraping.dev/product/1 --render-js --proxified \
   | scrapfly extract --content-type text/html --prompt "name, price, sku"
 
 # Screenshot auto-named into a directory
-scrapfly -O ./shots screenshot https://example.com --resolution 1920x1080
+scrapfly -O ./shots screenshot https://web-scraping.dev --resolution 1920x1080
 
 # Crawl synchronously, then extract the WARC you downloaded
-scrapfly crawl run https://example.com --max-pages 20 --content-format markdown
+scrapfly crawl run https://web-scraping.dev --max-pages 20 --content-format markdown
 scrapfly crawl artifact <uuid> --type warc -o crawl.warc
 scrapfly crawl parse warc-list crawl.warc --pretty
 ```
@@ -296,7 +296,7 @@ Use this repo as a reusable action to install the CLI on a runner:
 - uses: scrapfly/scrapfly-cli@v0.2.0
   with:
     api-key: ${{ secrets.SCRAPFLY_API_KEY }}
-- run: scrapfly scrape https://example.com --format markdown
+- run: scrapfly scrape https://web-scraping.dev --format markdown
 ```
 
 Inputs: `version` (default `latest`), `api-key` (exported to `SCRAPFLY_API_KEY`

@@ -174,8 +174,8 @@ func newAlertCreateCmd(flags *rootFlags) *cobra.Command {
 		Short: "Create a new alert definition",
 		Long: `Required: --name, --metric, --comparator, --threshold, at least one --channel.
 Channel format: kind:target (kind=email|webhook|inapp). Example:
-  --channel email:alerts@example.com
-  --channel webhook:https://hooks.example.com/scrapfly
+  --channel email:alerts@web-scraping.dev
+  --channel webhook:https://hooks.web-scraping.dev/scrapfly
 
 Alternatively --file path.json reads a full AlertCreateRequest envelope from
 disk — flags override file fields when both are present.`,
